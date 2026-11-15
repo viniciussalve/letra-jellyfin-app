@@ -163,4 +163,29 @@ describe("tracks", () => {
       await close();
     }
   });
+
+  test("PUT /api/tracks/:id/lyrics waits for Jellyfin async lyrics visibility", async () => {
+    const { app, cookie, jf, close } = await makeApp();
+    try {
+      jf.addItem({ id: "jf5", name: "Async Lyrics", artists: ["Artist"], album: null, runTimeTicks: 80_000_000, audioBytes: SONG });
+      const origGetLyrics = app.jellyfin.getLyrics.bind(app.jellyfin);
+      let calls = 0;
+      app.jellyfin.getLyrics = async (token, itemId) => {
+        calls += 1;
+        if (calls < 3) return null;
+        return origGetLyrics(token, itemId);
+      };
+
+      const res = await app.inject({
+        method: "PUT",
+        url: "/api/tracks/jf5/lyrics",
+        headers: { cookie },
+        payload: { text: "[00:01.00]Eventually visible" },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(calls).toBe(3);
+    } finally {
+      await close();
+    }
+  });
 });

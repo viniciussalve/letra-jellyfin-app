@@ -9,6 +9,7 @@ import type { SummaryResponse, Track, TrackDTO, TrackSummary } from "../../share
 import { getSession, requireSession } from "../auth.ts";
 import type { Config } from "../config.ts";
 import { lyricsToLrc, toTrack, toTrackDTO, toTrackSummary } from "../jellyfin/mapper.ts";
+import type { JellyfinClient } from "../jellyfin/types.ts";
 import { AppError, sendError } from "../lib/errors.ts";
 import { newId } from "../lib/ids.ts";
 import type { LrclibClient } from "../lib/lyrics/lrclib.ts";
@@ -19,6 +20,29 @@ import { deterministicPalette } from "../lib/palette.ts";
 const NOT_FOUND = () => new AppError(404, "not_found", "Música não encontrada.");
 const UPLOAD_SLACK_BYTES = 65536; // multipart framing on top of the file itself
 const MAX_LRC_BYTES = 1048576;
+const LYRICS_VISIBILITY_TIMEOUT_MS = 2000;
+const LYRICS_VISIBILITY_POLL_MS = 200;
+
+async function waitForLyrics(
+  jellyfin: Pick<JellyfinClient, "getLyrics">,
+  token: string,
+  itemId: string,
+  timeoutMs = LYRICS_VISIBILITY_TIMEOUT_MS,
+): Promise<void> {
+  if (typeof jellyfin.getLyrics !== "function") return;
+  const deadline = Date.now() + timeoutMs;
+  while (true) {
+    try {
+      const lyrics = await jellyfin.getLyrics(token, itemId);
+      if (lyrics !== null) return;
+    } catch {
+      // Treat transient read errors during Jellyfin's async lyrics indexing as not-yet-visible.
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(LYRICS_VISIBILITY_POLL_MS, remaining)));
+  }
+}
 
 function isFileTooLarge(err: unknown): boolean {
   return (err as { code?: string } | null)?.code === "FST_REQ_FILE_TOO_LARGE";
@@ -245,6 +269,7 @@ export function registerTracks(app: FastifyInstance, config: Config, lrclib: Lrc
         if (lyrics !== null && scanned) {
           const lrcFileName = `${(title || scanned.id).replace(/[/\\:*?"<>|]/g, "_")}.lrc`;
           await app.jellyfin.uploadLyrics(token, scanned.id, lrcFileName, lyricsToLrc(lyrics));
+          await waitForLyrics(app.jellyfin, token, scanned.id);
         } else if (lyrics === null && scanned?.hasLyrics) {
           lyrics = await app.jellyfin.getLyrics(token, scanned.id);
           if (lyrics) lyricsSource = "embedded";
@@ -290,6 +315,7 @@ export function registerTracks(app: FastifyInstance, config: Config, lrclib: Lrc
 
       const fileName = `${(item.title || item.id).replace(/[/\\:*?"<>|]/g, "_")}.lrc`;
       await app.jellyfin.uploadLyrics(token, item.id, fileName, lyricsToLrc(lyrics));
+      await waitForLyrics(app.jellyfin, token, item.id);
       app.translationCache.clearTrackTranslations(item.id);
       return toTrackDTO(toTrack(item, lyrics, { lyricsSource: source }), config.publicUrl);
     });
@@ -319,6 +345,7 @@ export function registerTracks(app: FastifyInstance, config: Config, lrclib: Lrc
 
       const fileName = `${(item.title || item.id).replace(/[/\\:*?"<>|]/g, "_")}.lrc`;
       await app.jellyfin.uploadLyrics(token, item.id, fileName, lyricsToLrc(lyrics));
+      await waitForLyrics(app.jellyfin, token, item.id);
       app.translationCache.clearTrackTranslations(item.id);
       return toTrackDTO(toTrack(item, lyrics, { lyricsSource: "manual" }), config.publicUrl);
     });
