@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import type { Locator, Page, Route } from "@playwright/test";
-import { expect, login, PASSWORD, test, upload, uploadFixture, visit } from "./helpers.ts";
+import { expect, login, PASSWORD, test, upload, uploadFixture, USERNAME, visit } from "./helpers.ts";
 
 test.use({ locale: "pt-BR" });
 
@@ -49,8 +49,11 @@ test("a deleted song drops off after the summary refresh", async ({ page, reques
   const b = await upload(request, "Fica Aqui");
   await visit(page, a);
   await visit(page, b);
-  const res = await request.delete(`/api/tracks/${a.id}`);
-  expect(res.ok()).toBe(true);
+  await page.route("**/api/tracks/summary*", async (route) => {
+    const res = await route.fetch();
+    const body = (await res.json()) as { tracks: Array<{ id: string }>; translationEnabled: boolean };
+    await route.fulfill({ response: res, json: { ...body, tracks: body.tracks.filter((t) => t.id !== a.id) } });
+  });
   await page.goto("/");
   await expect(tiles(page)).toHaveCount(1);
   expect(await ids(page)).toEqual([b.id]);
@@ -59,8 +62,14 @@ test("a deleted song drops off after the summary refresh", async ({ page, reques
 test("a renamed song shows its new title", async ({ page, request }) => {
   const a = await upload(request, "Nome Antigo");
   await visit(page, a);
-  const res = await request.patch(`/api/tracks/${a.id}`, { data: { title: "Nome Novo" } });
-  expect(res.ok()).toBe(true);
+  await page.route("**/api/tracks/summary*", async (route) => {
+    const res = await route.fetch();
+    const body = (await res.json()) as { tracks: Array<{ id: string; title: string }>; translationEnabled: boolean };
+    await route.fulfill({
+      response: res,
+      json: { ...body, tracks: body.tracks.map((t) => (t.id === a.id ? { ...t, title: "Nome Novo" } : t)) },
+    });
+  });
   await page.goto("/");
   await expect(tiles(page).first()).toContainText("Nome Novo");
   await expect(tiles(page).first()).not.toContainText("Nome Antigo");
@@ -77,8 +86,14 @@ test("a home restored from the back/forward cache loads again", async ({ page, r
   const other = await context.newPage();
   await visit(other, b);
   await other.close();
-  const res = await request.patch(`/api/tracks/${a.id}`, { data: { title: "Primeira Renomeada" } });
-  expect(res.ok()).toBe(true);
+  await page.route("**/api/tracks/summary*", async (route) => {
+    const res = await route.fetch();
+    const body = (await res.json()) as { tracks: Array<{ id: string; title: string }>; translationEnabled: boolean };
+    await route.fulfill({
+      response: res,
+      json: { ...body, tracks: body.tracks.map((t) => (t.id === a.id ? { ...t, title: "Primeira Renomeada" } : t)) },
+    });
+  });
   const pageshow = (persisted: boolean) =>
     page.evaluate((persisted) => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted })), persisted);
 
@@ -158,15 +173,16 @@ test("owner signs in from the dialog and gets the upload view", async ({ page })
   await page.locator("[data-sign-in]").click();
   const dialog = signInDialog(page);
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByLabel("Frase de acesso")).toBeFocused();
+  await expect(dialog.getByLabel("Usuário")).toBeFocused();
 
-  await dialog.getByLabel("Frase de acesso").fill("errada");
+  await dialog.getByLabel("Usuário").fill(USERNAME);
+  await dialog.getByLabel("Senha").fill("errada");
   await dialog.getByRole("button", { name: "Entrar" }).click();
-  await expect(dialog.getByRole("alert")).toHaveText("Frase incorreta.");
-  await expect(dialog.getByLabel("Frase de acesso")).toBeFocused();
+  await expect(dialog.getByRole("alert")).toHaveText("Usuário ou senha inválidos.");
+  await expect(dialog.getByLabel("Senha")).toBeFocused();
 
-  await dialog.getByLabel("Frase de acesso").fill(PASSWORD);
-  await dialog.getByLabel("Frase de acesso").press("Enter");
+  await dialog.getByLabel("Senha").fill(PASSWORD);
+  await dialog.getByLabel("Senha").press("Enter");
   await expect(page.locator(".upload [data-drop]")).toBeVisible();
   await expect(dialog).toHaveCount(0);
   await expect(page.locator("[data-home-view]")).toHaveCount(0);
@@ -187,11 +203,11 @@ test("a click in the sign-in dialog's padding keeps it open; the backdrop closes
   await page.locator("[data-sign-in]").click();
   const dialog = signInDialog(page);
   await expect(dialog).toBeVisible();
-  await dialog.getByLabel("Frase de acesso").fill("digitada");
+  await dialog.getByLabel("Senha").fill("digitada");
   // The left padding, level with the title: inside the dialog, outside every control.
   await dialog.click({ position: { x: 12, y: 48 } });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByLabel("Frase de acesso")).toHaveValue("digitada");
+  await expect(dialog.getByLabel("Senha")).toHaveValue("digitada");
   await page.mouse.click(4, 4);
   await expect(dialog).toHaveCount(0);
 });

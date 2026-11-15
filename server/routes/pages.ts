@@ -58,7 +58,10 @@ export function registerPages(app: FastifyInstance, config: Config, templates: T
             // Degrade gracefully: render player without lyrics if upstream /Lyrics fails.
           }
           data = {
-            track: toTrackDTO(toTrack(item, lyrics), config.publicUrl),
+            track: toTrackDTO(
+              toTrack(item, lyrics, { lyricsLang: app.translationCache.getTrackSourceLang(item.id) }),
+              config.publicUrl,
+            ),
             translationEnabled: app.translation.enabled,
             languages: LANGUAGES,
           };

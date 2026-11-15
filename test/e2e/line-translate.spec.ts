@@ -45,7 +45,11 @@ test("a row of a song the server has gets a translate button; a row of a gone so
   const a = await uploadFixture(request, "song.mp3");
   const b = await uploadFixture(request, "song.mp3");
   await seedSaved(page, [savedLine(a, 0), savedLine(b, 1)]);
-  expect((await request.delete(`/api/tracks/${b.id}`)).ok()).toBe(true);
+  await page.route("**/api/tracks/summary*", async (route) => {
+    const res = await route.fetch();
+    const body = (await res.json()) as { tracks: Array<{ id: string }>; translationEnabled: boolean };
+    await route.fulfill({ response: res, json: { ...body, tracks: body.tracks.filter((t) => t.id !== b.id) } });
+  });
   await page.goto("/salvas");
   await expect(page.locator("[data-song].is-gone")).toHaveCount(1);
   const row = page.locator(`[data-line][data-track="${a.id}"]`);

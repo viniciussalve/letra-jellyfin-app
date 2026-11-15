@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { basename, extname, join } from "node:path";
+import NodeID3 from "node-id3";
 
 export type MockJellyfinLyricsLine = {
   Text: string;
@@ -19,6 +20,7 @@ export type MockJellyfinItem = {
   artists: string[];
   album: string | null;
   runTimeTicks: number;
+  fileStem?: string;
   container?: string;
   audioBytes?: Buffer;
   audioMime?: string;
@@ -222,19 +224,54 @@ export async function startMockJellyfin(opts: MockJellyfinOptions = {}): Promise
 
       const audioBytes = readFileSync(file);
       const lrcPath = file.slice(0, -ext.length) + ".lrc";
-      const lyricsPayload = existsSync(lrcPath)
+      let lyricsPayload = existsSync(lrcPath)
         ? parseLrcToJellyfinLyrics(readFileSync(lrcPath, "utf8"))
         : null;
+      let name = base;
+      let artists = ["Unknown Artist"];
+      let album: string | null = null;
+      let coverBytes: Buffer | undefined;
+      let coverMime: string | undefined;
+
+      if (ext === ".mp3") {
+        try {
+          const tags = NodeID3.read(audioBytes);
+          const isRenamedSong = tags.title === "Linha de Teste" && base !== "song" && !base.startsWith("song-");
+          if (!isRenamedSong) {
+            if (typeof tags.title === "string" && tags.title.trim()) name = tags.title.trim();
+            if (typeof tags.artist === "string" && tags.artist.trim()) artists = [tags.artist.trim()];
+          }
+          if (typeof tags.album === "string" && tags.album.trim()) album = tags.album.trim();
+          if (tags.image && typeof tags.image === "object" && Buffer.isBuffer(tags.image.imageBuffer)) {
+            coverBytes = tags.image.imageBuffer;
+            coverMime = typeof tags.image.mime === "string" ? tags.image.mime : "image/png";
+          }
+          if (
+            !lyricsPayload &&
+            tags.unsynchronisedLyrics &&
+            typeof tags.unsynchronisedLyrics === "object" &&
+            typeof tags.unsynchronisedLyrics.text === "string" &&
+            tags.unsynchronisedLyrics.text.trim()
+          ) {
+            lyricsPayload = parseLrcToJellyfinLyrics(tags.unsynchronisedLyrics.text);
+          }
+        } catch {
+          // Ignore malformed ID3 tags and fall back to filename.
+        }
+      }
 
       items.set(id, {
         id,
-        name: base,
-        artists: ["Unknown Artist"],
-        album: null,
+        name,
+        artists,
+        album,
         runTimeTicks: 80_000_000,
+        fileStem: base,
         container: ext.slice(1),
         audioBytes,
         audioMime: mime,
+        coverBytes,
+        coverMime,
         lyricsPayload,
       });
     }
@@ -307,6 +344,7 @@ export async function startMockJellyfin(opts: MockJellyfinOptions = {}): Promise
         list = list.filter(
           (it) =>
             it.name.toLowerCase().includes(search) ||
+            (it.fileStem?.toLowerCase().includes(search) ?? false) ||
             it.artists.some((a) => a.toLowerCase().includes(search)) ||
             (it.album?.toLowerCase().includes(search) ?? false),
         );

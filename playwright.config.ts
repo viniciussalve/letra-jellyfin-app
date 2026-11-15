@@ -10,6 +10,12 @@ const INSECURE_PORT = 4323;
 const url = (port: number) => `http://127.0.0.1:${port}`;
 // Chromium keeps Secure cookies on loopback over http; under this name it does not.
 const INSECURE_HOST = "letra.test";
+const existingNoProxy = process.env.NO_PROXY ?? process.env.no_proxy ?? "localhost,127.0.0.1,::1,[::1]";
+if (!existingNoProxy.split(",").includes(INSECURE_HOST)) {
+  const next = `${existingNoProxy},${INSECURE_HOST}`;
+  process.env.NO_PROXY = next;
+  process.env.no_proxy = next;
+}
 
 const server = (port: number, translator: string, env: Record<string, string> = {}) => ({
   command: "node test/e2e/server.ts",
@@ -43,7 +49,7 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         baseURL: `http://${INSECURE_HOST}:${INSECURE_PORT}`,
-        launchOptions: { args: [`--host-resolver-rules=MAP ${INSECURE_HOST} 127.0.0.1`] },
+        launchOptions: { args: [`--host-resolver-rules=MAP ${INSECURE_HOST} 127.0.0.1`, "--no-proxy-server"] },
       },
     },
   ],

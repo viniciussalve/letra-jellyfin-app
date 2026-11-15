@@ -1,4 +1,4 @@
-import { expect, PASSWORD, test } from "./helpers.ts";
+import { expect, PASSWORD, test, USERNAME } from "./helpers.ts";
 
 // This project's server has an https:// PUBLIC_URL, so it marks the session cookie
 // Secure. The page is opened over plain http on a host name that is not loopback
@@ -9,7 +9,8 @@ test.use({ locale: "pt-BR" });
 test("a session the browser did not keep is explained on the sign-in", async ({ page }) => {
   await page.goto("/");
   await page.locator("[data-sign-in]").click();
-  const password = page.getByLabel("Frase de acesso");
+  await page.getByLabel("Usuário").fill(USERNAME);
+  const password = page.getByLabel("Senha");
   await password.fill(PASSWORD);
   await password.press("Enter");
 

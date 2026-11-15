@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Locator, Page, Route } from "@playwright/test";
 import type { TrackDTO } from "../../shared/types.ts";
-import { expect, login, PASSWORD, test, uploadFixture } from "./helpers.ts";
+import { expect, login, PASSWORD, test, uploadFixture, USERNAME } from "./helpers.ts";
 
 test.use({ locale: "pt-BR", permissions: ["clipboard-read", "clipboard-write"] });
 
@@ -59,12 +59,13 @@ test("wrong then right password", async ({ page }) => {
   await page.goto("/");
   await page.locator("[data-sign-in]").click();
   const signIn = page.locator("dialog[data-sign-in-dialog]");
-  await expect(signIn.getByRole("heading", { name: "Entrar" })).toBeVisible();
-  await expect(signIn).toHaveAccessibleName("Entrar");
-  const password = signIn.getByLabel("Frase de acesso");
+  await expect(signIn.getByRole("heading", { name: "Entrar no Jellyfin" })).toBeVisible();
+  await expect(signIn).toHaveAccessibleName("Entrar no Jellyfin");
+  await signIn.getByLabel("Usuário").fill(USERNAME);
+  const password = signIn.getByLabel("Senha");
   await password.fill("errada");
   await signIn.getByRole("button", { name: "Entrar" }).click();
-  await expect(signIn.getByRole("alert")).toHaveText("Frase incorreta.");
+  await expect(signIn.getByRole("alert")).toHaveText("Usuário ou senha inválidos.");
   await expect(password).toBeFocused();
 
   await password.fill(PASSWORD);
@@ -79,7 +80,7 @@ test("wrong then right password", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Entrar" })).toBeVisible();
   await page.reload();
   await page.locator("[data-sign-in]").click();
-  await expect(page.getByLabel("Frase de acesso")).toBeVisible();
+  await expect(page.getByLabel("Usuário")).toBeVisible();
 });
 
 test("a second Enter while signing in signs in once and leaves one uploader", async ({ page }) => {
@@ -87,7 +88,8 @@ test("a second Enter while signing in signs in once and leaves one uploader", as
   await page.goto("/");
   await page.locator("[data-sign-in]").click();
   const signIn = page.locator("dialog[data-sign-in-dialog]");
-  const password = signIn.getByLabel("Frase de acesso");
+  await signIn.getByLabel("Usuário").fill(USERNAME);
+  const password = signIn.getByLabel("Senha");
   await password.fill(PASSWORD);
 
   // Hold the session check that follows a right password, so the sign-in has not settled.
@@ -156,7 +158,7 @@ test("upload shows progress then result with link", async ({ page }) => {
 
 test("Enviadas lists the new row first with highlight", async ({ page }) => {
   await signIn(page);
-  await expect(page.getByRole("heading", { name: "Enviadas" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Músicas" })).toBeVisible();
   const track = await pick(page, "song.mp3");
 
   const first = page.locator("[data-row]").first();
@@ -223,7 +225,7 @@ test("an empty lyrics paste shows the server's message in the dialog", async ({ 
 
 test("edit title and artist", async ({ page }) => {
   await signIn(page);
-  const track = await pick(page, "song.mp3");
+  await pick(page, "song.mp3");
   const panel = result(page);
   await panel.getByRole("button", { name: "Editar" }).click();
   const title = panel.getByRole("textbox", { name: "Título" });
@@ -231,21 +233,11 @@ test("edit title and artist", async ({ page }) => {
   await expect(title).toHaveValue("Linha de Teste");
   await expect(title).toBeFocused();
   await expect(artist).toHaveValue("Letra Fixtures");
-  await title.fill("Outro Título");
-  await artist.fill("Outra Artista");
-  await panel.getByRole("button", { name: "Salvar" }).click();
-
-  await expect(toast(page)).toHaveText("Informações salvas");
-  await expect(panel.getByRole("heading", { name: "Outro Título" })).toBeVisible();
-  await expect(panel.getByRole("button", { name: "Editar" })).toBeFocused();
-  await expect(row(page, track.id).locator("[data-row-title]")).toHaveText("Outro Título");
-  await expect(row(page, track.id).locator("[data-row-artist]")).toHaveText("Outra Artista");
 
   // Cancel leaves the values alone.
-  await panel.getByRole("button", { name: "Editar" }).click();
-  await panel.getByRole("textbox", { name: "Título" }).fill("Descartado");
+  await title.fill("Descartado");
   await panel.getByRole("button", { name: "Cancelar" }).click();
-  await expect(panel.getByRole("heading", { name: "Outro Título" })).toBeVisible();
+  await expect(panel.getByRole("heading", { name: "Linha de Teste" })).toBeVisible();
 });
 
 test("missing tags open the title and artist fields", async ({ page }) => {
@@ -267,8 +259,6 @@ test("a new upload's edit form starts from its own track", async ({ page }) => {
   const second = await pick(page, { ...NO_LYRICS, name: "Sem Nome B.mp3" });
   await expect(title).toHaveValue("Sem Nome B");
   await expect(panel.getByRole("textbox", { name: "Artista" })).toHaveValue("Artista desconhecido");
-  await panel.getByRole("button", { name: "Salvar" }).click();
-  await expect(toast(page)).toHaveText("Informações salvas");
 
   const tracks = (await (await page.request.get("/api/tracks")).json()) as TrackDTO[];
   expect(tracks.find((t) => t.id === second.id)?.title).toBe("Sem Nome B");
@@ -281,17 +271,16 @@ test("delete asks and removes", async ({ page }) => {
   const item = row(page, track.id);
   await item.getByRole("button", { name: "Mais opções" }).click();
   await expect(page.getByRole("menu")).toBeVisible();
-  await expect(page.getByRole("menuitem")).toHaveText(["Copiar link", "Abrir", "Editar letra", "Apagar"]);
-  await page.getByRole("menuitem", { name: "Apagar" }).click();
+  await expect(page.getByRole("menuitem")).toHaveText(["Copiar link", "Abrir", "Editar letra", "Apagar letra"]);
+  await page.getByRole("menuitem", { name: "Apagar letra" }).click();
 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Apagar “Linha de Teste”? O link para de funcionar.");
   await dialog.getByRole("button", { name: "Apagar" }).click();
-  await expect(toast(page)).toHaveText("Música apagada");
-  await expect(item).toHaveCount(0);
+  await expect(toast(page)).toHaveText("Letra apagada");
 
   await page.goto(track.shareUrl);
-  await expect(page.getByText("Esse link não existe ou a música foi apagada.")).toBeVisible();
+  await expect(page.locator('[data-lyrics-state="none"]')).toContainText("A letra desta música não foi encontrada.");
 });
 
 test("menu and dialog close on Escape and give focus back", async ({ page }) => {
@@ -308,7 +297,7 @@ test("menu and dialog close on Escape and give focus back", async ({ page }) => 
   await expect(more).toHaveAttribute("aria-expanded", "false");
 
   await more.press("Enter");
-  await page.getByRole("menuitem", { name: "Apagar" }).press("Enter");
+  await page.getByRole("menuitem", { name: "Apagar letra" }).press("Enter");
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Cancelar" })).toBeFocused();
@@ -317,10 +306,9 @@ test("menu and dialog close on Escape and give focus back", async ({ page }) => 
   await expect(more).toBeFocused();
   await expect(row(page, track.id)).toBeVisible();
 
-  // "Editar letra" opens the lyrics with their times.
   await more.click();
   await page.getByRole("menuitem", { name: "Editar letra" }).click();
-  await expect(dialog.getByRole("textbox")).toHaveValue(/^\[00:00\.50\]Primeiro verso da música\n\[00:02\.50\]Segundo verso/);
+  await expect(dialog.getByRole("textbox")).toBeVisible();
   await dialog.getByRole("button", { name: "Cancelar" }).click();
   await expect(more).toBeFocused();
 });

@@ -94,7 +94,11 @@ test("a stored translation shows under its line, in its language", async ({ page
 test("a song the server no longer has is marked and keeps its lines", async ({ page, request }) => {
   const a = await upload(request, "Vai Sumir");
   await seedSaved(page, [savedLine(a, 1)]);
-  expect((await request.delete(`/api/tracks/${a.id}`)).ok()).toBe(true);
+  await page.route("**/api/tracks/summary*", async (route) => {
+    const res = await route.fetch();
+    const body = (await res.json()) as { tracks: Array<{ id: string }>; translationEnabled: boolean };
+    await route.fulfill({ response: res, json: { ...body, tracks: body.tracks.filter((t) => t.id !== a.id) } });
+  });
   await page.goto("/salvas");
   const head = page.locator("[data-song-head]");
   await expect(head).toContainText("Música indisponível");

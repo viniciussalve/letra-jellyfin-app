@@ -1,10 +1,12 @@
-import { randomInt } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { expect, test as base, type APIRequestContext, type Page } from "@playwright/test";
+import NodeID3 from "node-id3";
 import type { TrackDTO } from "../../shared/types.ts";
 import type { SavedLine } from "../../web/shared/saved.ts";
 
-export const PASSWORD = "e2e-pass";
+export const USERNAME = "jelly";
+export const PASSWORD = "jelly-pass";
 
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/${name}`, import.meta.url));
 
@@ -30,7 +32,7 @@ export { expect };
  * loopback, so many logins never trip the 5/min limit.
  */
 export async function login(request: APIRequestContext): Promise<void> {
-  const res = await request.post("/api/session", { data: { password: PASSWORD }, headers: { "x-forwarded-for": randomIp() } });
+  const res = await request.post("/api/session", { data: { username: USERNAME, password: PASSWORD }, headers: { "x-forwarded-for": randomIp() } });
   if (!res.ok()) throw new Error(`login failed: ${res.status()} ${await res.text()}`);
 }
 
@@ -61,9 +63,13 @@ export const refuseFullscreen = (page: Page) =>
 
 /** Uploads song.mp3 under a title of our own (the owner session lives in `request`, not in the page). */
 export async function upload(request: APIRequestContext, title: string, artist = "Artista Teste"): Promise<TrackDTO> {
-  const track = await uploadFixture(request, "song.mp3");
-  const res = await request.patch(`/api/tracks/${track.id}`, { data: { title, artist } });
-  expect(res.ok()).toBe(true);
+  await login(request);
+  const tagged = NodeID3.update({ title, artist }, fixture("song.mp3"));
+  if (!Buffer.isBuffer(tagged)) throw new Error("failed to tag fixture MP3");
+  const res = await request.post("/api/tracks", {
+    multipart: { file: { name: `${randomUUID()}.mp3`, mimeType: "audio/mpeg", buffer: tagged } },
+  });
+  if (res.status() !== 201) throw new Error(`upload failed: ${res.status()} ${await res.text()}`);
   return (await res.json()) as TrackDTO;
 }
 

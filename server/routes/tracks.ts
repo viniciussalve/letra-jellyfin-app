@@ -248,7 +248,7 @@ export function registerTracks(app: FastifyInstance, config: Config, lrclib: Lrc
 
         const actualName = basename(destPath);
         const stem = actualName.slice(0, actualName.length - extname(actualName).length) || actualName;
-        const parsed = splitStem(actualName);
+        const parsed = splitStem(safeName);
         const candidates = await app.jellyfin.listAudioItems(token, { search: stem });
         const scanned =
           candidates.find((it) => it.title === stem) ??

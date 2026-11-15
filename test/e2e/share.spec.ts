@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import type { APIRequestContext, Page } from "@playwright/test";
 import jsQR from "jsqr";
 import type { TrackDTO } from "../../shared/types.ts";
-import { expect, noFullscreenApi, test, uploadFixture } from "./helpers.ts";
+import { expect, noFullscreenApi, test, upload, uploadFixture } from "./helpers.ts";
 import { decodePngRgba, pngDimensions } from "./png.ts";
 
 // Desktop Chromium has no navigator.share: "Mais…" is absent and Stories downloads the
@@ -184,11 +184,8 @@ test("header shows title and artist; the dialog's accessible name is the title",
 });
 
 test("WhatsApp and X links are exact", async ({ page, request }) => {
-  const uploaded = await uploadFixture(request, "song.mp3");
   // Accents, quotes and & in the title must survive the encoding.
-  const res = await request.patch(`/api/tracks/${uploaded.id}`, { data: { title: `Ação & "Reação"?` } });
-  expect(res.ok()).toBe(true);
-  const track = (await res.json()) as TrackDTO;
+  const track = await upload(request, `Ação & "Reação"?`);
   await page.goto(track.shareUrl);
   await openShare(page);
 
@@ -433,9 +430,7 @@ test("phone renders the dialog as a bottom sheet", async ({ page, request }) => 
 test("five actions fit in one row at 360 px, with a 200-character title", async ({ page, request }) => {
   await page.setViewportSize({ width: 360, height: 740 });
   await fakeWebShare(page);
-  const uploaded = await uploadFixture(request, "song.mp3");
-  const res = await request.patch(`/api/tracks/${uploaded.id}`, { data: { title: "T".repeat(200) } });
-  expect(res.ok()).toBe(true);
+  const uploaded = await upload(request, "T".repeat(200));
   await page.goto(uploaded.shareUrl);
   await openShare(page);
 

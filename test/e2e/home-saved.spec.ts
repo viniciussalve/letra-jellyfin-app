@@ -69,7 +69,11 @@ test("a card opens the song at its verse", async ({ page, request }) => {
 test("a card of a removed song is not a link and says so", async ({ page, request }) => {
   const a = await upload(request, "Vai Sumir");
   await seedSaved(page, [savedLine(a, 1)]);
-  expect((await request.delete(`/api/tracks/${a.id}`)).ok()).toBe(true);
+  await page.route("**/api/tracks/summary*", async (route) => {
+    const res = await route.fetch();
+    const body = (await res.json()) as { tracks: Array<{ id: string }>; translationEnabled: boolean };
+    await route.fulfill({ response: res, json: { ...body, tracks: body.tracks.filter((t) => t.id !== a.id) } });
+  });
   await page.goto("/");
   await expect(cards(page)).toHaveCount(1);
   await expect(cards(page).locator(".saved-card-who i")).toHaveText("Música indisponível");

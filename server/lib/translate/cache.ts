@@ -28,6 +28,7 @@ export type TranslationCache = {
   saveTrackTranslation(entry: CachedTranslation): void;
   getLineTranslation(trackId: string, lang: string, lineHash: string): CachedLineTranslation | null;
   saveLineTranslation(entry: CachedLineTranslation): void;
+  getTrackSourceLang(trackId: string): string | null;
   clearTrackTranslations(trackId: string): void;
 };
 
@@ -115,6 +116,12 @@ export function createTranslationCache(filePath: string | null): TranslationCach
         if (oldest !== undefined) lines.delete(oldest);
       }
       persist();
+    },
+    getTrackSourceLang(trackId) {
+      for (const v of tracks.values()) {
+        if (v.trackId === trackId && v.sourceLang !== null) return v.sourceLang;
+      }
+      return null;
     },
     clearTrackTranslations(trackId) {
       let changed = false;

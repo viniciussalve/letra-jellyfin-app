@@ -40,7 +40,8 @@ const RECORDS: Record<string, LrclibRecord> = {
 function startLrclibStub(): Promise<Server> {
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://stub");
-    const found = RECORDS[url.searchParams.get("track_name") ?? ""];
+    const rawName = url.searchParams.get("track_name") ?? "";
+    const found = RECORDS[rawName] ?? RECORDS[rawName.replace(/-[0-9A-Za-z_-]{6}$/, "")];
     res.setHeader("content-type", "application/json");
     if (url.pathname === "/api/search") {
       res.end(JSON.stringify(found ? [found] : []));

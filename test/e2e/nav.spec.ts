@@ -1,5 +1,5 @@
 import type { Locator, Page, Route } from "@playwright/test";
-import { expect, login, noFullscreenApi, PASSWORD, randomIp, savedLine, seedSaved, test, upload, visit } from "./helpers.ts";
+import { expect, login, noFullscreenApi, PASSWORD, randomIp, savedLine, seedSaved, test, upload, USERNAME, visit } from "./helpers.ts";
 
 test.use({ locale: "pt-BR" });
 
@@ -179,7 +179,8 @@ test("/salvas shows Entrar to a listener and Sair to the owner; signing in there
 
   // Signing in stays here and turns the action into "Sair".
   await actions(page).getByRole("button", { name: "Entrar" }).click();
-  await signInDialog(page).getByLabel("Frase de acesso").fill(PASSWORD);
+  await signInDialog(page).getByLabel("Usuário").fill(USERNAME);
+  await signInDialog(page).getByLabel("Senha").fill(PASSWORD);
   await signInDialog(page).getByRole("button", { name: "Entrar" }).click();
   await expect(signInDialog(page)).toHaveCount(0);
   await expect(page).toHaveURL(/\/salvas$/);

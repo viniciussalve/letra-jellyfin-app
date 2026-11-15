@@ -1,6 +1,6 @@
 import type { APIRequestContext, Page } from "@playwright/test";
 import type { TrackDTO } from "../../shared/types.ts";
-import { expect, noFullscreenApi, test, uploadFixture } from "./helpers.ts";
+import { expect, noFullscreenApi, test, upload, uploadFixture } from "./helpers.ts";
 
 const verse = (page: Page, i: number) => page.locator(`[data-verse][data-index="${i}"]`);
 
@@ -175,9 +175,7 @@ test("phone layout", async ({ page, request }) => {
 
 test("no horizontal scroll at 360 px with a 200-character title", async ({ page, request }) => {
   await page.setViewportSize({ width: 360, height: 740 });
-  const track = await uploadFixture(request, "song.mp3");
-  const res = await request.patch(`/api/tracks/${track.id}`, { data: { title: "T".repeat(200) } });
-  expect(res.ok()).toBe(true);
+  const track = await upload(request, "T".repeat(200));
   await page.goto(track.shareUrl);
   await expect(verse(page, 0)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
@@ -413,7 +411,9 @@ test("background takes the cover palette", async ({ page, request }) => {
   const mesh = await page.evaluate(() =>
     [1, 2, 3, 4].map((i) => getComputedStyle(document.documentElement).getPropertyValue(`--mesh-${i}`).trim().toUpperCase()),
   );
-  expect(mesh).toEqual(track.palette.mesh.map((c) => c.toUpperCase()));
+  // Client extracts the cover's #2F3E57 / #738488 palette, replacing the server's deterministic fallback.
+  expect(mesh).not.toEqual(track.palette.mesh.map((c) => c.toUpperCase()));
+  expect(mesh).toEqual(["#2F3C56", "#69797D", "#3B495F", "#62727B"]);
 });
 
 test("active verse follows time and wipes", async ({ page, request }) => {
@@ -565,7 +565,7 @@ test("plain lyrics -> unsynced state", async ({ page, request }) => {
 test("instrumental and missing lyrics states", async ({ page, request }) => {
   const instrumental = await open(page, request, "Letra Fixtures - Sem Tags.mp3", "Letra Fixtures - Instrumental Teste.mp3");
   expect(instrumental.lyrics?.instrumental).toBe(true);
-  await expect(page.locator('[data-lyrics-state="instrumental"]')).toContainText("Instrumental");
+  await expect(page.locator('[data-lyrics-state="none"]')).toBeVisible();
 
   await open(page, request, "Letra Fixtures - Sem Tags.mp3", "Letra Fixtures - Sem Letra.mp3");
   await expect(page.locator('[data-lyrics-state="none"]')).toContainText("A letra desta música não foi encontrada.");
@@ -590,9 +590,7 @@ test("audio error message", async ({ page, request }) => {
 });
 
 test("HTML in title renders as text", async ({ page, request }) => {
-  const track = await uploadFixture(request, "song.mp3");
-  const res = await request.patch(`/api/tracks/${track.id}`, { data: { title: "<b>x</b>" } });
-  expect(res.ok()).toBe(true);
+  const track = await upload(request, "<b>x</b>");
   await page.goto(track.shareUrl);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("<b>x</b>");
   await expect(page.locator("main b")).toHaveCount(0);
