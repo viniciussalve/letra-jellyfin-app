@@ -1,0 +1,63 @@
+/* --- the navigation bar (spec §3) -----------------------------------------------------------------
+
+   The wordmark, the tabs "Início" and "Linhas salvas", then the screen's actions. Its frame (width,
+   padding, height and the space under it) lives here, so the wordmark and the tabs sit in the same
+   place on every screen. One row on every width: when it cannot hold everything, the actions wrap
+   under, never the tabs. */
+
+.nav-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 8px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding:
+    max(16px, env(safe-area-inset-top))
+    max(24px, env(safe-area-inset-right))
+    32px
+    max(24px, env(safe-area-inset-left));
+}
+
+/* 28 px to the first tab: the bar's 12 px gap and 16 px of its own. */
+.nav-wordmark { flex: none; margin: 0 16px 0 0; font-size: 22px; line-height: 28px; font-weight: 700; letter-spacing: -.02em; }
+
+.nav-tabs { display: flex; flex: none; gap: 20px; }
+.nav-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 44px;
+  border-radius: 4px;
+  color: var(--text-2);
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.nav-tab[aria-current="page"], .nav-tab:focus-visible { color: var(--text-1); }
+@media (hover: hover) { .nav-tab:hover { color: var(--text-1); } }
+/* The current tab's underline: 2 px, 6 px under the text (the text's 20 px line is centred in 44).
+   A border, not a background, so forced-colours mode keeps it. */
+.nav-tab[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  top: calc(50% + 10px + 6px);
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 2px solid currentColor;
+}
+
+.nav-actions { display: flex; align-items: center; gap: 8px; min-height: 44px; margin-left: auto; }
+
+/* The page transition (base.css): the tabs are the part of the bar that is the same on every
+   screen, so they have their own group and stay put while the page cross-fades under them; the
+   current tab's look cross-fades as the root does. The actions differ per screen and go with the
+   root. One name per page: the bar is on every screen once. */
+.nav-tabs { view-transition-name: nav; }
+::view-transition-group(nav) { animation-duration: var(--dur-move); animation-timing-function: var(--ease-move); }
+::view-transition-old(nav), ::view-transition-new(nav) { animation-duration: var(--dur-fast); }

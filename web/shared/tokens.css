@@ -1,0 +1,68 @@
+:root {
+  /* page: the cover gradient under a black veil (background.css) */
+  --bg:            #000;
+  --veil:          rgb(0 0 0 / .55);   /* over the cover gradient */
+
+  /* text */
+  --text-1:        #FFFFFF;
+  --text-2:        #AFAFB6;            /* artist, times, secondary */
+
+  /* surfaces */
+  --surface:       #141416;            /* dialogs, sheets, drop panel */
+  --surface-2:     #26262A;            /* round action buttons, inputs */
+
+  /* glass: the round buttons and borders over the page */
+  --glass-fill:    rgb(255 255 255 / .18);  /* circular buttons */
+  --glass-border:  rgb(255 255 255 / .12);
+  /* menus, dialogs and toasts: dark glass, so --danger text on it reads at 4.5:1 */
+  --menu-bg:       rgb(28 28 30 / .84);
+  --row-hover:     rgb(255 255 255 / .08);
+  --hairline:      rgb(255 255 255 / .12);
+
+  /* lyrics */
+  --verse-dim-opacity: .55;
+  --verse-dim-scale:   .9;
+  --verse-unsung:  rgb(255 255 255 / .45);  /* wipe: the part not yet sung */
+  --lyrics-ease:   cubic-bezier(.4, 0, .2, 1);
+  --lyrics-duration: .46s;
+  --lyrics-dim-delay: 90ms;
+  --lyrics-follow: 500ms;
+
+  /* motion (spec v3 §5) */
+  --dur-fast: 120ms;   /* press, hover */
+  --dur-exit: 150ms;   /* anything leaving; icon swaps */
+  --dur-base: 200ms;   /* icons, toasts, dialogs and menus entering */
+  --dur-move: 400ms;   /* the cover changing place; page transition */
+  --dur-spring: 350ms; /* the save pop */
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+  --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+  --ease-move: cubic-bezier(.2, 0, 0, 1); /* movement: the cover, the page transition, the lyrics' follow */
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+
+  /* controls */
+  --bar-track:     rgb(255 255 255 / .2);
+  --bar-fill:      #fff;
+  --bar-height:    4px;                /* 6px while hovered or dragged */
+  --danger:        #FF453A;
+
+  --radius-cover: 0;    --radius-row: 10px;  --radius-input: 12px;
+  --radius-menu: 14px;  --radius-panel: 20px; --radius-pill: 999px;
+
+  --font: "Inter Variable", "Inter", system-ui, "Hiragino Sans",
+          "Noto Sans CJK JP", "Apple SD Gothic Neo", "Noto Sans KR",
+          "PingFang SC", sans-serif;
+}
+
+/* A spring with 12% overshoot (damping ratio .56) where linear() exists. */
+@supports (transition-timing-function: linear(0, 1)) {
+  :root {
+    --ease-spring: linear(0, 0.051, 0.178, 0.344, 0.52, 0.686, 0.83, 0.945, 1.028, 1.082, 1.111, 1.12, 1.115, 1.1, 1.08, 1.059, 1.039, 1.021, 1.007, 0.997, 0.99, 0.987, 0.986, 0.986, 1);
+  }
+}
+
+/* Default gradient (no cover, upload page), from the reference. Zero specificity:
+   the share page's per-track <style>:root{--mesh-*} comes before this stylesheet in
+   <head> and must still win. */
+:where(:root) {
+  --mesh-1: #2F3E57;  --mesh-2: #738488;  --mesh-3: #0F1014;  --mesh-4: #424B51;
+}

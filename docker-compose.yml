@@ -1,0 +1,58 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
+    image: letra-app
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Bare names pass through from the shell when set (used by the smoke test).
+      - UPLOAD_PASSWORD
+      - PUBLIC_URL
+      - TRANSLATOR
+      - PORT
+      - LIBRETRANSLATE_URL
+      - TRANSLATE_API_URL
+      - TRANSLATE_API_KEY
+      - TRANSLATE_MODEL
+      - TRANSLATE_DETECT_LANGUAGE
+    ports:
+      - "${APP_BIND:-0.0.0.0}:${APP_PORT:-3000}:3000"
+    volumes:
+      - letra-data:/data
+    restart: unless-stopped
+
+  libretranslate:
+    image: libretranslate/libretranslate:v1.9.6
+    profiles: ["libretranslate"]
+    environment:
+      LT_LOAD_ONLY: en,pt,es,fr,de,it,ja,ko,zh,ru,tr,pl,nl,hi
+    volumes:
+      - lt-models:/home/libretranslate/.local
+    restart: unless-stopped
+
+  hymt:
+    image: ghcr.io/ggml-org/llama.cpp:server-b12242
+    profiles: ["hymt"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        model=/models/Hy-MT2-1.8B-Q4_K_M.gguf
+        if [ ! -s "$$model" ]; then
+          echo "Downloading the translation model (1.1 GB), once..."
+          curl -fL --retry 3 -o "$$model.part" "https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF/resolve/main/Hy-MT2-1.8B-Q4_K_M.gguf"
+          mv "$$model.part" "$$model"
+        fi
+        exec /app/llama-server --model "$$model" --ctx-size 4096 --parallel 1
+    volumes:
+      - hymt-models:/models
+    restart: unless-stopped
+
+volumes:
+  letra-data:
+  lt-models:
+  hymt-models:

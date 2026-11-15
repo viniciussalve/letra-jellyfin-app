@@ -1,0 +1,134 @@
+/* --- saved lines page (/salvas) ---------------------------------------------------------------- */
+
+.saved-col { max-width: 680px; margin: 0 auto; }
+.saved-head { margin-bottom: 36px; }
+.saved-head h1 { margin: 0; font-size: 24px; line-height: 28px; font-weight: 700; letter-spacing: -.01em; }
+.saved-head p { margin: 4px 0 0; color: var(--text-2); font-size: 14px; line-height: 20px; font-weight: 500; }
+.saved-song { margin-bottom: 40px; }
+.saved-song-head { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; color: inherit; text-decoration: none; }
+.saved-cover { flex: none; width: 48px; height: 48px; border-radius: 4px; overflow: hidden; background: var(--surface-2); }
+.saved-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.saved-cover.is-tile { display: grid; place-items: center; color: rgb(255 255 255 / .7); font-size: 22px; }
+.saved-meta { min-width: 0; flex: 1; }
+.saved-meta h2 { margin: 0; font-size: 17px; line-height: 22px; font-weight: 600; }
+.saved-meta p { margin: 0; color: var(--text-2); font-size: 14px; line-height: 20px; font-weight: 500; }
+[data-song-count] { color: var(--text-2); font-size: 14px; line-height: 20px; font-weight: 500; }
+.saved-lines { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--hairline); }
+.saved-line {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: "text time acts" "when time acts";
+  column-gap: 12px; align-items: center;
+  position: relative; /* the line's link covers the row */
+  margin: 0 -12px; padding: 12px 4px 12px 12px; border-radius: var(--radius-row);
+  transition: background-color var(--dur-fast) var(--ease-out), opacity var(--dur-exit) var(--ease-out);
+}
+.saved-line.is-leaving { opacity: 0; pointer-events: none; }
+.saved-line + .saved-line { box-shadow: 0 -1px 0 var(--hairline); }
+.saved-line-text { grid-area: text; min-width: 0; }
+.saved-line-link { display: block; color: inherit; text-decoration: none; overflow-wrap: anywhere; border-radius: 4px; }
+/* The whole row opens the song at the line: the link's hit area stretches over it. */
+a.saved-line-link::after { content: ""; position: absolute; inset: 0; border-radius: var(--radius-row); }
+.saved-line-meta { display: contents; }
+.saved-q { display: block; font-size: 20px; line-height: 26px; font-weight: 600; letter-spacing: -.01em; text-wrap: pretty; }
+.saved-tr { display: block; margin-top: 2px; color: var(--text-2); font-size: 15px; line-height: 20px; font-weight: 500; }
+/* Lighter than the mockup's .7, for 4.5 : 1 over the backdrop's lightest part at phone width. */
+.saved-tr.is-busy { color: rgb(175 175 182 / .85); }
+/* A note takes the translation's place; "Tentar de novo" sits after its text. */
+.saved-note { display: flex; flex-wrap: wrap; align-items: center; gap: 0 12px; margin: 2px 0 0; color: var(--text-2); font-size: 15px; line-height: 20px; font-weight: 500; }
+.saved-retry {
+  position: relative; z-index: 1; /* above the row's link */
+  min-height: 44px; padding: 0 4px; border: 0; border-radius: var(--radius-input); background: none; color: var(--text-1);
+  font: inherit; font-weight: 600; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px;
+}
+.saved-when { grid-area: when; margin-top: 4px; color: rgb(175 175 182 / .75); font-size: 13px; line-height: 18px; font-weight: 500; }
+.saved-time { grid-area: time; display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 13px; line-height: 18px; font-weight: 500; font-variant-numeric: tabular-nums; transition: color var(--dur-fast) var(--ease-out); }
+.saved-time .icon { opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
+.saved-time .icon svg { width: 11px; height: 11px; }
+.saved-acts { grid-area: acts; display: flex; position: relative; z-index: 1; /* above the row's link */ }
+.saved-act {
+  display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 50%; background: none; color: var(--text-1); font-size: 20px;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.saved-act .icon svg { width: 20px; height: 20px; }
+.saved-act:active { transform: scale(.94); }
+.saved-song.is-gone h2, .saved-song.is-gone .saved-q { color: var(--text-2); }
+
+/* The translate button and its menu of languages. */
+.saved-tr-wrap { position: relative; }
+.saved-translate { color: rgb(175 175 182 / .8); transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out); }
+.saved-translate.is-on, .saved-translate[aria-expanded="true"] { color: var(--text-1); }
+.saved-translate[aria-expanded="true"] { background: rgb(255 255 255 / .14); }
+.saved-line.has-menu { z-index: 2; } /* its menu covers the rows below, their buttons included */
+.line-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 2; width: 232px; padding: 6px;
+  border-radius: var(--radius-menu);
+  /* Not --menu-bg: this menu sits over rows of large text, which read through the token's .84.
+     The same color, opaque (also what the token becomes under reduced transparency and more contrast). */
+  background: rgb(28 28 30);
+  box-shadow: 0 18px 44px rgb(0 0 0 / .5), 0 0 0 1px var(--glass-border);
+  transform-origin: top right; opacity: 1; scale: 1;
+  transition: opacity var(--dur-exit) var(--ease-out), scale var(--dur-exit) var(--ease-out), display var(--dur-fast) allow-discrete;
+}
+.line-menu.is-up { top: auto; bottom: calc(100% + 6px); transform-origin: bottom right; }
+.line-menu[hidden] { display: none; opacity: 0; scale: .96; transition-duration: var(--dur-fast); }
+@starting-style { .line-menu { opacity: 0; scale: .96; } }
+.line-menu .menu-row { gap: 12px; height: auto; min-height: 44px; border-radius: 8px; font-size: 15px; line-height: 20px; font-weight: 500; }
+.line-menu .menu-row .icon { visibility: hidden; }
+.line-menu .menu-row .icon svg { width: 16px; height: 16px; }
+.line-menu .menu-row[aria-checked="true"] { background: var(--row-hover); }
+.line-menu .menu-row[aria-checked="true"] .icon { visibility: visible; }
+.line-menu .menu-row[aria-disabled="true"] { background: none; color: rgb(175 175 182 / .6); }
+/* The note says why the row is disabled: lighter than the mockup's .6, for 4.5 : 1 on the menu. */
+.line-menu .menu-row[aria-disabled="true"] .menu-note { color: rgb(175 175 182 / .75); }
+.menu-note { font-size: 13px; font-weight: 500; }
+
+@media (hover: hover) {
+  .saved-line:hover { background: var(--row-hover); }
+  .saved-line:hover, .saved-line:hover + .saved-line { box-shadow: none; }
+  /* The first row's hairline is the list's own border. */
+  .saved-lines:has(> .saved-line:first-child:hover) { border-top-color: transparent; }
+  .saved-line:hover .saved-time { color: var(--text-1); }
+  .saved-line:hover .saved-time .icon { opacity: 1; }
+}
+
+.saved-empty a {
+  display: inline-grid; place-items: center; min-height: 44px; padding: 0 4px; border-radius: var(--radius-input);
+  color: var(--text-2); font-size: 14px; line-height: 22px; font-weight: 500;
+}
+@media (hover: hover) { .saved-empty a:hover { color: var(--text-1); } }
+
+@media (max-width: 639px) {
+  .saved-head h1 { font-size: 22px; line-height: 26px; }
+  .saved-q { font-size: 18px; line-height: 24px; }
+  .saved-tr, .saved-note { font-size: 14px; }
+  .saved-line { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "text text" "meta acts"; row-gap: 2px; padding: 14px 4px 6px 12px; }
+  .saved-line-meta { grid-area: meta; display: flex; align-items: center; gap: 14px; }
+  .saved-when { margin: 0; }
+  .saved-time .icon { opacity: 1; }
+  .saved-time .icon svg { width: 10px; height: 10px; }
+}
+
+/* --- saved lines on the home ---------------------------------------------------------------------- */
+
+.saved-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 56px; }
+.saved-card {
+  display: grid; align-content: space-between; gap: 20px; min-height: 148px; padding: 18px 18px 16px; border-radius: var(--radius-panel); background: rgb(255 255 255 / .08);
+  color: inherit; text-decoration: none;
+}
+a.saved-card { transition: scale var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out); }
+a.saved-card:active { scale: .98; }
+@media (hover: hover) { a.saved-card:hover { background: rgb(255 255 255 / .12); } }
+.saved-card-q { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; font-size: 19px; line-height: 25px; font-weight: 600; letter-spacing: -.01em; }
+.saved-card-by { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.saved-card .saved-cover { width: 32px; height: 32px; border-radius: 3px; font-size: 16px; }
+.saved-card-who { min-width: 0; flex: 1; }
+.saved-card-who b, .saved-card-who i { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: normal; font-size: 13px; line-height: 18px; }
+.saved-card-who b { font-weight: 600; }
+.saved-card-who i { color: var(--text-2); font-weight: 500; }
+.saved-card-when { flex: none; color: var(--text-2); font-size: 13px; line-height: 18px; font-weight: 500; }
+
+@media (max-width: 639px) {
+  .saved-cards { grid-template-columns: 1fr; gap: 10px; margin-bottom: 40px; }
+  .saved-card { min-height: 0; gap: 14px; padding: 16px; }
+  .saved-card-q { -webkit-line-clamp: 2; font-size: 17px; line-height: 23px; }
+}

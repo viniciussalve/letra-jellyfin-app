@@ -1,0 +1,39 @@
+/* Background: four cover colors (--mesh-1..4) over the darkest, soft-edged, drifting,
+   under a black veil (--veil), so the page reads near-black tinted by the cover.
+   Shared by the share page and the upload page (default colors there). */
+
+.bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--mesh-dark, var(--mesh-3));
+}
+.bg-field {
+  position: absolute;
+  inset: -30%; /* oversized so the drift never reveals an edge */
+  background:
+    radial-gradient(63% 69% at 30% 36%, var(--mesh-1), transparent 100%),
+    radial-gradient(66% 72% at 72% 30%, var(--mesh-2), transparent 100%),
+    radial-gradient(60% 60% at 28% 78%, var(--mesh-3), transparent 100%),
+    radial-gradient(60% 66% at 64% 70%, var(--mesh-4), transparent 100%);
+  will-change: transform;
+  animation: drift 60s ease-in-out infinite;
+}
+/* The veil sits over the field (it comes after it) and does not drift. */
+.bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--veil);
+}
+.bg.is-paused .bg-field { animation-play-state: paused; }
+@keyframes drift {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  33% { transform: translate3d(3%, -2%, 0) rotate(5deg) scale(1.06); }
+  66% { transform: translate3d(-2%, 3%, 0) rotate(-4deg) scale(1.03); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bg-field { animation: none; }
+}

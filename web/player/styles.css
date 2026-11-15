@@ -1,0 +1,1085 @@
+/* Share page (spec v2 §4). The app's navigation bar (shared/nav.css) is the first row on
+   every width, with translation, share and full screen as its actions. Wide screens
+   (≥ 1024 px) follow TIDAL's now-playing view: the bar 64 px tall, the cover 72 px from
+   the left, a narrow lyrics column 72 px after it and a 96 px player bar along the bottom.
+   Phones and tablets put the same elements, one per control, on a single CSS grid: the
+   bar, a header row (cover, title), the lyrics, the progress bar and the transport;
+   layout-order.ts moves the title and the progress bar in the DOM to match, so focus and
+   screen readers follow what is drawn. */
+
+[hidden] { display: none !important; }
+
+html, body { height: 100%; }
+body { overflow: hidden; overscroll-behavior: none; }
+
+#app {
+  position: relative;
+  isolation: isolate;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* --- shared pieces ----------------------------------------------------------------- */
+
+.icon { display: inline-grid; grid-area: 1 / 1; transition: opacity var(--dur-exit) var(--ease-out), scale var(--dur-exit) var(--ease-out); }
+.icon.is-entering, .icon.is-leaving { opacity: 0; scale: .9; }
+.icon svg { display: block; width: 20px; height: 20px; }
+
+.cover {
+  position: relative;
+  overflow: hidden;
+  flex: none;
+  container-type: size;
+  border-radius: var(--radius-cover);
+  background: var(--surface-2);
+  /* It moves by a FLIP (flip() in shared/motion.ts), never by a transition; "none" also keeps
+     the reduced-motion rule's 0.01ms duration from starting one on top/left/width/height. */
+  transition: none;
+  view-transition-name: cover;
+}
+.cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cover-tile { display: grid; place-items: center; width: 100%; height: 100%; color: var(--text-2); }
+.cover-tile .icon svg { width: 40cqmin; height: 40cqmin; }
+
+/* Title and artist: one line each, cut with an ellipsis. */
+.now { min-width: 0; }
+.title, .artist {
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.title { font-size: 14px; line-height: 20px; font-weight: 600; }
+.artist { font-size: 14px; line-height: 20px; font-weight: 500; color: var(--text-2); }
+.badge {
+  display: inline-block;
+  margin: 4px 0 0;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 600;
+}
+
+/* Round 44 px buttons (translation, share, full screen). */
+.glass-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--glass-fill);
+  color: var(--text-1);
+  text-decoration: none;
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.glass-btn:active:not(:disabled), .text-pill:active:not(:disabled), .glass-pill:active:not(:disabled) { transform: scale(.97); }
+.glass-btn[aria-pressed="true"] { background: #fff; color: #000; }
+
+/* Text pills (the language): 32 px tall, like TIDAL's, with the hit area
+   stretched to 44 px. Solid white with black text while on. */
+.text-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--glass-fill);
+  color: var(--text-1);
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.text-pill::after { content: ""; position: absolute; inset: -6px 0; }
+.text-pill[aria-pressed="true"] { background: #fff; color: #000; }
+/* The language pill opens a menu: a small chevron after the name. */
+[data-language]::before {
+  content: "";
+  order: 1;
+  width: 6px;
+  height: 6px;
+  margin: -3px 1px 0 0;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.glass-pill {
+  height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--glass-fill);
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 500;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .glass-btn:hover:not([aria-pressed="true"]),
+  .text-pill:hover:not([aria-pressed="true"]),
+  .glass-pill:hover { background: rgb(255 255 255 / .26); }
+}
+
+/* White-filled controls: put the dark ring against the fill and the white ring outside it. */
+.glass-btn[aria-pressed="true"]:focus-visible,
+.text-pill[aria-pressed="true"]:focus-visible { outline-offset: 2px; }
+
+/* Progress and volume: a thin rounded bar; it grows and shows its handle while hovered, focused or dragged.
+   The box is 44 px tall for the hit target, but its negative margins leave only the
+   bar's footprint in the layout. */
+.range {
+  --fill-n: 0;
+  --thumb: 12px;
+  --thumb-scale: 0;
+  /* Exact at rest (0 is empty, 1 is full); while the handle shows, the fill ends at its center. */
+  --fill-stop: calc(var(--fill-n) * 100% + (.5 - var(--fill-n)) * var(--thumb) * var(--thumb-scale));
+  --bar: var(--bar-height);
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin: -20px 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  touch-action: none;
+}
+.range::-webkit-slider-runnable-track {
+  height: var(--bar);
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--bar-fill) var(--fill-stop), var(--bar-track) var(--fill-stop));
+  transition: height var(--dur-fast) var(--ease-out);
+}
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--thumb);
+  height: var(--thumb);
+  margin-top: calc((var(--bar) - var(--thumb)) / 2);
+  border: 0;
+  border-radius: 50%;
+  background: var(--bar-fill);
+  scale: var(--thumb-scale);
+  transition: scale var(--dur-fast) var(--ease-out);
+}
+.range::-moz-range-track { height: var(--bar); border-radius: var(--radius-pill); background: var(--bar-track); }
+.range::-moz-range-progress { height: var(--bar); border-radius: var(--radius-pill); background: var(--bar-fill); }
+.range::-moz-range-thumb {
+  width: var(--thumb);
+  height: var(--thumb);
+  border: 0;
+  border-radius: 50%;
+  background: var(--bar-fill);
+  scale: var(--thumb-scale);
+  transition: scale var(--dur-fast) var(--ease-out);
+}
+.range[data-dragging], .range:active, .range:focus-visible { --thumb-scale: 1; }
+.range[data-dragging], .range:active { --bar: 6px; }
+@media (hover: hover) {
+  .range:hover { --bar: 6px; --thumb-scale: 1; }
+}
+
+/* The progress bar's hit area reaches over its neighbors; the transport stays on top. */
+.progress-row { position: relative; z-index: 1; }
+.time {
+  pointer-events: none;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.transport {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--transport-gap, 24px);
+}
+.transport-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--skip-box, 44px);
+  height: var(--skip-box, 44px);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-1);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.transport-btn.play { width: var(--play-box, 48px); height: var(--play-box, 48px); }
+.transport-btn:active:not(:disabled) { transform: scale(.94); }
+.transport-btn.play .icon svg { width: var(--play-icon, 34px); height: var(--play-icon, 34px); }
+.transport-btn.skip .icon svg { width: var(--skip-icon, 30px); height: var(--skip-icon, 30px); }
+.skip-num {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding-top: 1px;
+  font-size: var(--skip-num, 9px);
+  font-weight: 700;
+  letter-spacing: -.02em;
+  pointer-events: none;
+}
+
+.volume {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 148px;
+  color: var(--text-2);
+}
+.volume-icon { display: grid; }
+.volume .range { flex: 1; width: auto; min-width: 0; }
+
+.audio-error {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--radius-input);
+  background: var(--surface-2);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  text-align: center;
+}
+
+/* --- lyrics column --------------------------------------------------------------------- */
+
+.lyrics {
+  --fade: 64px;
+  --verse-size: clamp(26px, 2.2vw, 34px);
+  --verse-line: 1.1;
+  --verse-pad: .25em; /* half a line of space between verses (.5em) */
+  --blur-1: 1px; /* inactive verses blur by distance from the active one (data-blur) */
+  --blur-2: 2px;
+  --blur-3: 3px;
+  --save-gutter: 40px; /* room for the save icon (stage 2) at the end of each verse */
+  position: relative;
+  container-type: size;
+  min-height: 0;
+  /* Back from the cover view the verses wait until the cover, which moves over their place, has
+     passed them. Side by side it clears the column at about 260 ms of its 400. */
+  --lyrics-return: calc(var(--dur-move) - var(--dur-fast));
+  transition: opacity var(--dur-base) var(--ease-out) var(--lyrics-return), visibility 0s;
+}
+.lyrics-scroll {
+  position: relative; /* verses measure offsetTop from here */
+  height: 100%;
+  padding-inline: var(--pad-l) var(--pad-r);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overflow-anchor: none;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 var(--fade), #000 calc(100% - var(--fade)), transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 var(--fade), #000 calc(100% - var(--fade)), transparent 100%);
+}
+.lyrics-scroll::-webkit-scrollbar { display: none; }
+/* The first verse starts 30% down; the end keeps at least 184 px of padding, and enough
+   for the last verse to reach 30% too. */
+.lyrics-list {
+  padding-block: calc(30cqh - var(--verse-pad)) max(184px, 70cqh);
+  padding-inline-end: var(--save-gutter);
+  font-size: var(--verse-size);
+  line-height: var(--verse-line);
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+
+.verse {
+  display: block;
+  width: fit-content;
+  max-width: calc(100% + 24px);
+  margin: 0 -12px;
+  padding: var(--verse-pad) 12px;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: start;
+  overflow-wrap: break-word;
+  cursor: default;
+  transform-origin: left center;
+  /* The verse that dims waits a beat; the one that lights (below) does not. */
+  transition:
+    opacity var(--lyrics-duration) var(--lyrics-ease) var(--lyrics-dim-delay),
+    transform var(--lyrics-duration) var(--lyrics-ease) var(--lyrics-dim-delay),
+    filter var(--lyrics-duration) var(--lyrics-ease) var(--lyrics-dim-delay),
+    translate var(--lyrics-follow) var(--ease-move);
+}
+.lyrics[data-lyrics-state="synced"] .verse:not([data-state="active"]) {
+  opacity: var(--verse-dim-opacity);
+  transform: scale(var(--verse-dim-scale));
+}
+.lyrics[data-lyrics-state="synced"] .verse[data-state="active"] {
+  transition:
+    opacity var(--lyrics-duration) var(--lyrics-ease),
+    transform var(--lyrics-duration) var(--lyrics-ease),
+    filter var(--lyrics-duration) var(--lyrics-ease),
+    translate var(--lyrics-follow) var(--ease-move);
+}
+.lyrics[data-lyrics-state="synced"] .verse:not([data-state="active"])[data-blur="1"] { filter: blur(var(--blur-1)); }
+.lyrics[data-lyrics-state="synced"] .verse:not([data-state="active"])[data-blur="2"] { filter: blur(var(--blur-2)); }
+.lyrics[data-lyrics-state="synced"] .verse:not([data-state="active"])[data-blur="3"] { filter: blur(var(--blur-3)); }
+button.verse { cursor: pointer; }
+/* The FLIP jump offsets rows with no slide: drop only `translate` from the list, so the
+   fades still running on a verse are not cancelled. Translate is the last entry of every
+   verse transition list, so the duration, delay and easing lists still line up by index.
+   Specific enough to beat the active verse's list, so the verse that was active slides too. */
+.lyrics[data-lyrics-state] .lyrics-list.is-jumping .verse { transition-property: opacity, transform, filter; }
+/* The wipe: one inline span, so wrapped lines fill in reading order. */
+.verse[data-state="active"] .verse-text {
+  background: linear-gradient(90deg, #fff var(--p, 0%), var(--verse-unsung) var(--p, 0%));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+/* The shared dots component: the intro row and breaks. */
+.verse.is-dots .verse-text { background: none; }
+.dots { display: inline-flex; align-items: center; gap: .3em; height: 1em; vertical-align: middle; }
+.dot {
+  display: block;
+  width: .3em;
+  height: .3em;
+  border-radius: 50%;
+  background: #fff;
+}
+.verse[data-state="active"] .dot { animation: dot-pulse 1.6s ease-in-out infinite; }
+.dot:nth-child(2) { animation-delay: .2s !important; }
+.dot:nth-child(3) { animation-delay: .4s !important; }
+@keyframes dot-pulse {
+  0%, 100% { opacity: .35; transform: scale(.8); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+/* No opacity of its own under inactive verses (they dim it); 85% under the active one. */
+.verse-translation {
+  display: block;
+  margin-top: .1em;
+  font-size: max(.6em, 19px);
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--text-1);
+  transition: opacity var(--lyrics-duration) var(--lyrics-ease);
+}
+.verse[data-state="active"] .verse-translation { opacity: .85; }
+@media (hover: hover) {
+  .lyrics[data-lyrics-state="synced"] button.verse:hover:not([data-state="active"]) { opacity: .8; filter: none; }
+}
+.lyrics[data-lyrics-state="synced"] button.verse:focus-visible:not([data-state="active"]) { opacity: .8; filter: none; }
+.verse { scroll-margin-block: 20cqh 28cqh; }
+
+.lyrics[data-lyrics-state="unsynced"] .verse { color: rgb(255 255 255 / .85); }
+.lyrics[data-lyrics-state="unsynced"] .verse-translation { opacity: .85; }
+.lyrics[data-lyrics-state="unsynced"] .verse.is-break { padding-block: .25em; }
+
+.lyrics-message {
+  max-width: 16em;
+  margin: 0;
+  color: var(--text-2);
+}
+
+.back-pill,
+.save-pill {
+  position: absolute;
+  left: calc(50% + (var(--pad-l) - var(--pad-r)) / 2);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+/* Out of sight, still read and clicked by assistive technology (same clip as .sr-only in the upload page). */
+.skip-lyrics,
+.save-pill:not(:focus-visible),
+.save-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.back-pill,
+.save-pill {
+  bottom: 24px;
+  padding: 0 18px;
+  transform: translateX(-50%);
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 500;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.back-pill:active:not(:disabled),
+.save-pill:active { transform: translateX(-50%) scale(.97); }
+/* The save pill takes the back pill's place while the keyboard is on it. */
+.save-pill:focus-visible ~ .back-pill { opacity: 0; pointer-events: none; }
+.save-pill .icon { grid-area: auto; }
+.save-pill .save-filled,
+.save-pill[aria-pressed="true"] .save-outline { display: none; }
+.save-pill[aria-pressed="true"] .save-filled { display: inline-grid; }
+
+/* --- save icon and saved verse ---------------------------------------------------------- */
+
+/* The verse grows into the gutter, so the saved background covers the text and the icon as one
+   shape; the text keeps its width. */
+.verse.has-save {
+  position: relative;
+  isolation: isolate;
+  margin-inline-end: calc(-12px - var(--save-gutter));
+  padding-inline-end: calc(12px + var(--save-gutter));
+  max-width: calc(100% + 24px + var(--save-gutter));
+}
+/* The background is its own layer so the verse keeps the transition list tuned for the lyrics. */
+.verse.has-save::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: rgb(255 255 255 / .08);
+  opacity: 0;
+  transition: opacity var(--dur-exit) var(--ease-out);
+}
+.verse.has-save[data-saved]::before { opacity: 1; transition-duration: var(--dur-base); }
+
+.verse-save {
+  position: absolute;
+  inset-inline-end: calc((12px + var(--save-gutter) - 44px) / 2);
+  top: calc(var(--verse-pad) + (1lh - 44px) / 2);
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  font: inherit;
+  line-height: inherit;
+  color: inherit;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.verse-save:active { transform: scale(.94); }
+.verse-save .icon {
+  transition: opacity var(--dur-exit) var(--ease-out);
+}
+.verse-save .icon svg { width: 22px; height: 22px; }
+.verse-save .save-outline { color: rgb(255 255 255 / .72); }
+.verse-save .save-filled { color: var(--text-1); opacity: 0; }
+.verse[data-saved] .save-filled { opacity: 1; transition-duration: var(--dur-base); }
+.verse[data-saved] .save-outline { opacity: 0; }
+.verse-save.is-popping .save-filled { animation: save-pop var(--dur-spring) var(--ease-spring); }
+@keyframes save-pop { from { transform: scale(.6); } }
+
+/* While the saved marks are first applied at load, nothing fades. */
+.save-restoring .verse.has-save[data-saved]::before,
+.save-restoring .verse[data-saved] .verse-save,
+.save-restoring .verse[data-saved] .verse-save .icon { transition: none; }
+/* A dimmed verse is scaled down; this keeps the icon's target at 44 px on screen. */
+.verse-save::after {
+  content: "";
+  position: absolute;
+  inset: calc(-22px * (1 / var(--verse-dim-scale) - 1));
+}
+
+@media (hover: hover) {
+  .verse.has-save:hover .verse-save { opacity: 1; pointer-events: auto; }
+}
+.verse.has-save:focus-visible .verse-save,
+.verse-save:focus-visible,
+.verse.has-save[data-saved] .verse-save { opacity: 1; pointer-events: auto; }
+@media (hover: none) {
+  .verse.has-save[data-state="active"] .verse-save,
+  .verse.has-save[data-picked] .verse-save { opacity: 1; pointer-events: auto; }
+}
+
+/* Status copy over the lyrics: the same-language note and the failure message. */
+.translation-note, .translation-error {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  z-index: 1;
+  max-width: calc(100% - 32px);
+  transform: translateX(-50%);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+}
+.translation-note { margin: 0; padding: 12px 20px; text-align: center; }
+.translation-error { display: flex; align-items: center; gap: 12px; padding: 0 0 0 20px; }
+
+/* Language menu: a dark panel of 44 px rows under the pill. */
+.translate-group { position: relative; display: flex; align-items: center; gap: 8px; }
+.language-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 5;
+  width: max-content;
+  min-width: 200px;
+  max-height: min(60dvh, 396px);
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: var(--radius-menu);
+  background: var(--menu-bg);
+  box-shadow: 0 18px 50px rgb(0 0 0 / .4), 0 0 0 1px var(--glass-border);
+  /* Grows from the corner of its button; the hidden attribute does the toggling. */
+  transform-origin: top right;
+  opacity: 1;
+  scale: 1;
+  transition: opacity var(--dur-exit) var(--ease-out), scale var(--dur-exit) var(--ease-out), display var(--dur-fast) allow-discrete;
+}
+.language-menu[hidden] {
+  display: none;
+  opacity: 0;
+  scale: .96;
+  transition-duration: var(--dur-fast);
+}
+@starting-style {
+  .language-menu { opacity: 0; scale: .96; }
+}
+.menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--text-1);
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 500;
+  text-align: start;
+}
+.menu-row .icon { visibility: hidden; }
+.menu-row[aria-checked="true"] .icon { visibility: visible; }
+.menu-row:hover, .menu-row:focus-visible { background: var(--row-hover); }
+
+.toast {
+  position: fixed;
+  /* Centered at the width it needs: both sides are 16 px from the edges, and auto margins share the rest. */
+  inset-inline: 16px;
+  width: fit-content;
+  margin-inline: auto;
+  bottom: 112px; /* above the bottom bar */
+  z-index: 20;
+  max-width: calc(100vw - 32px);
+  padding: 11px 20px;
+  border-radius: var(--radius-pill);
+  background: var(--menu-bg);
+  box-shadow: 0 12px 32px rgb(0 0 0 / .3);
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 500;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+  transition: opacity var(--dur-exit) var(--ease-out), transform var(--dur-exit) var(--ease-out), visibility 0s var(--dur-exit);
+}
+.toast.is-shown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out), visibility 0s;
+}
+.toast:not(.is-shown) { pointer-events: none; }
+.toast-input {
+  width: min(70vw, 360px);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+}
+
+/* --- the navigation bar ---------------------------------------------------------------
+   Its own frame (nav.css) puts the wordmark and the tabs where the home has them; the player
+   only trims the space under it, which here is the stage's. The language menu opens over the
+   stage. On phones under 480 px the wordmark is not shown, whatever the actions, so the tabs
+   start the row in one place; the actions wrap under them when they do not fit (the language
+   pill showing), among themselves too when a long language name needs it. */
+.player > .nav-bar { position: relative; z-index: 3; width: 100%; padding-bottom: 4px; }
+.player .nav-actions { flex-wrap: wrap; justify-content: flex-end; row-gap: 8px; }
+@media (max-width: 479px) {
+  .player > .nav-bar .nav-wordmark { display: none; }
+}
+/* Stacked with the wordmark shown, the bar spans the grid, whose side padding (--side-l/-r) is
+   not the bar's 24 px: it reaches out by the difference, so it sits where the home has it. */
+@media (min-width: 480px) and (max-width: 1023px) {
+  .player > .nav-bar {
+    width: auto;
+    margin-inline:
+      calc(max(24px, env(safe-area-inset-left)) - var(--side-l))
+      calc(max(24px, env(safe-area-inset-right)) - var(--side-r));
+  }
+}
+
+/* Lyrics off: the column, the translation controls, the wordmark and the tabs fade out.
+   Share and full screen stay: full screen is the way back. */
+.player[data-lyrics="off"] .lyrics,
+.player[data-lyrics="off"] .translate-group,
+.player[data-lyrics="off"] .nav-wordmark,
+.player[data-lyrics="off"] .nav-tabs {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--dur-exit) var(--ease-out), visibility 0s var(--dur-exit);
+}
+.translate-group, .player .nav-wordmark, .player .nav-tabs { transition: opacity var(--dur-base) var(--ease-out), visibility 0s; }
+
+/* Phones blur less. */
+@media (max-width: 639px) {
+  .lyrics { --blur-1: .6px; --blur-2: 1.2px; --blur-3: 2px; }
+}
+
+/* Reduced motion: no wipe and no fades (the blur stays, static); the active verse is white at once. */
+@media (prefers-reduced-motion: reduce) {
+  .lyrics { transition-delay: 0s; } /* the global rule shortens durations, not delays */
+  .verse, .verse-text, .verse-translation { transition: none; }
+  .lyrics[data-lyrics-state="synced"] .verse:not([data-state="active"]) { transform: none; }
+  .verse[data-state="active"] .verse-text { background: none; color: var(--text-1); }
+  .dot, .verse[data-state="active"] .dot { animation: none; }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .lyrics[data-lyrics-state="synced"] .verse:not([data-state="active"]) { opacity: .7; }
+  .lyrics[data-lyrics-state="synced"] .verse:not([data-state="active"])[data-blur] { filter: none; }
+}
+
+/* --- wide: TIDAL's now-playing view ------------------------------------------------- */
+
+@media (min-width: 1024px) {
+  .player {
+    --cover: min(426px, 30vw, calc(100vh - 260px));
+    --cover-off: min(62vh, 640px, calc(100vw - 144px));
+    --column: min(520px, 38vw);
+    --gutter: 72px;
+    --bar-x: 24px;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) 96px; /* the bar: 16 + 44 + 4 = 64 px */
+  }
+
+  .stage { position: relative; min-height: 0; }
+  /* The group (cover, 72 px, lyrics column) is centered in the stage; at least 72 px at the
+     sides. Both children are absolute in the stage, so 100% is the stage's width. */
+  .player {
+    --pad-l: 16px; /* the column's side padding: the one source on wide screens; */
+    --pad-r: 16px; /* phones and tablets set theirs on .lyrics (the ≤ 1023 px rules) */
+    --group: calc(var(--cover) + var(--gutter) - var(--pad-l) + var(--column));
+    --group-left: max(var(--gutter), calc((100% - var(--group)) / 2));
+  }
+  .cover {
+    position: absolute;
+    top: calc(50% - var(--cover) / 2);
+    left: var(--group-left);
+    width: var(--cover);
+    height: var(--cover);
+  }
+  /* The verses start 72 px after the cover; the column's own padding sits in that gap. */
+  .lyrics {
+    position: absolute;
+    inset-block: 0;
+    left: calc(var(--group-left) + var(--cover) + var(--gutter) - var(--pad-l));
+    width: var(--column);
+  }
+  .player[data-lyrics="off"] .cover {
+    top: calc(50% - var(--cover-off) / 2);
+    left: calc(50% - var(--cover-off) / 2);
+    width: var(--cover-off);
+    height: var(--cover-off);
+  }
+
+  .bottom-bar {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 32px;
+    padding: 0 var(--bar-x) 8px;
+  }
+  .transport-area { display: grid; justify-items: center; row-gap: 4px; }
+  .progress-row {
+    display: grid;
+    grid-template-columns: minmax(44px, auto) min(560px, 40vw) minmax(44px, auto);
+    align-items: center;
+    column-gap: 12px;
+  }
+  [data-elapsed] { text-align: end; }
+  .volume { justify-self: end; }
+  .audio-error {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 12px);
+    width: max-content;
+    max-width: calc(100% - 48px);
+    transform: translateX(-50%);
+  }
+}
+
+/* --- phones and tablets: one grid, header row, lyrics, controls ------------------------- */
+
+@media (max-width: 1023px) {
+  .player {
+    /* Side padding, kept clear of the notch and rounded corners in landscape. */
+    --side-l: max(20px, env(safe-area-inset-left));
+    --side-r: max(20px, env(safe-area-inset-right));
+    --thumb: 48px;
+    --big: min(100%, 480px, max(160px, 100dvh - 380px)); /* the cover with lyrics off */
+    --transport-gap: clamp(28px, 12vw, 64px);
+    --skip-box: 56px;
+    --play-box: 64px;
+    --skip-icon: 38px;
+    --play-icon: 50px;
+    --skip-num: 11px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    /* bar, header, stage, title under a big cover (lyrics off), error, progress, transport */
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto auto auto;
+    /* No top padding: the bar's own frame holds the safe area and the 16 px above the tabs. */
+    padding: 0 var(--side-r) max(16px, env(safe-area-inset-bottom)) var(--side-l);
+  }
+  .stage, .bottom-bar, .transport-area { display: contents; }
+  .volume { display: none; }
+
+  /* The bar spans the grid; the grid's side padding is its side padding. */
+  .player > .nav-bar { grid-area: 1 / 1 / 2 / -1; padding-inline: 0; }
+  .cover { grid-area: 2 / 1; align-self: center; width: var(--thumb); height: var(--thumb); margin-top: 8px; }
+  .now { grid-area: 2 / 2; align-self: center; margin: 8px 0 0 12px; }
+  .title { font-size: 15px; line-height: 20px; }
+  .artist { line-height: 18px; }
+
+  /* The lyrics run edge to edge; their own padding keeps the verses on the sides. */
+  .lyrics {
+    --pad-l: var(--side-l);
+    --pad-r: var(--side-r);
+    --save-gutter: 36px;
+    --fade: 40px;
+    --verse-size: 26px;
+    --verse-line: 29px;
+    grid-area: 3 / 1 / 4 / -1;
+    margin: 8px calc(-1 * var(--side-r)) 0 calc(-1 * var(--side-l));
+  }
+  .verse-translation { font-size: 19px; line-height: 24px; }
+
+  .audio-error { grid-area: 5 / 1 / 6 / -1; margin-top: 8px; }
+  .progress-row {
+    grid-area: 6 / 1 / 7 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: "bar bar" "elapsed remaining";
+    row-gap: 10px;
+    margin-top: 16px;
+  }
+  .progress { grid-area: bar; }
+  [data-elapsed] { grid-area: elapsed; }
+  [data-remaining] { grid-area: remaining; justify-self: end; }
+  .transport { grid-area: 7 / 1 / 8 / -1; justify-self: center; margin-top: 4px; }
+
+  /* The toast is on <body>: it clears the progress bar and the transport (their 98 px, plus
+     the 22 px it kept above the progress row before the pills row went). */
+  .toast { bottom: calc(max(16px, env(safe-area-inset-bottom)) + 120px); }
+
+  /* Lyrics off: a large cover with the title under it, above the controls. */
+  .player[data-lyrics="off"] .lyrics { display: none; }
+  /* Back from it the column is displayed again: it fades in from 0. Stacked, the cover crosses
+     the verses until it lands in the header, so they come back after it (--lyrics-return).
+     Only on a return (data-lyrics-back), not when the page loads. */
+  .lyrics { --lyrics-return: var(--dur-move); }
+  @starting-style {
+    .player[data-lyrics-back][data-lyrics="on"] .lyrics { opacity: 0; }
+  }
+  .player[data-lyrics="off"] .cover {
+    grid-area: 3 / 1 / 4 / -1;
+    align-self: end;
+    justify-self: center;
+    width: var(--big);
+    height: auto;
+    max-height: 100%;
+    aspect-ratio: 1;
+    margin: 0;
+  }
+  .player[data-lyrics="off"] .now {
+    grid-area: 4 / 1 / 5 / -1;
+    justify-self: center;
+    width: var(--big);
+    margin: 20px 0 0;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .player {
+    --side-l: max(32px, env(safe-area-inset-left));
+    --side-r: max(32px, env(safe-area-inset-right));
+    --thumb: 64px;
+  }
+  /* The wide verse size. */
+  .lyrics {
+    --verse-size: clamp(26px, 2.2vw, 34px);
+    --verse-line: 1.1;
+  }
+  .verse-translation { font-size: max(.6em, 19px); line-height: 1.25; }
+}
+
+/* --- share dialog (spec v2 §5) ------------------------------------------------------------
+   A 400 px card centered on wide screens; a bottom sheet on phones. The dialog box has no
+   padding, so a click whose target is the box itself landed on the backdrop. */
+
+.share-dialog {
+  width: 400px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 24px;
+  background: var(--surface);
+  color: var(--text-1);
+  overscroll-behavior: contain;
+}
+.share-dialog::backdrop { background: rgb(0 0 0 / .6); }
+/* [open] is the resting state and enters from @starting-style; the closed state is where the exit ends. */
+.share-dialog {
+  opacity: 0;
+  scale: .96;
+  transition: opacity var(--dur-base) var(--ease-out), scale var(--dur-base) var(--ease-out);
+}
+.share-dialog[open] { opacity: 1; scale: 1; }
+.share-dialog::backdrop {
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.share-dialog[open]::backdrop { opacity: 1; }
+@starting-style {
+  .share-dialog[open] { opacity: 0; scale: .96; }
+  .share-dialog[open]::backdrop { opacity: 0; }
+}
+/* The exit, only where the closed dialog can stay in the top layer while it plays (overlay).
+   Elsewhere it would play in the page's flow: the dialog closes with a cut (dialog.ts). */
+@supports (overlay: auto) {
+  .share-dialog {
+    transition: opacity var(--dur-exit) var(--ease-out), scale var(--dur-exit) var(--ease-out), overlay var(--dur-exit) allow-discrete, display var(--dur-exit) allow-discrete;
+  }
+  .share-dialog[open] { transition-duration: var(--dur-base); }
+  .share-dialog::backdrop {
+    transition: opacity var(--dur-exit) var(--ease-out), overlay var(--dur-exit) allow-discrete, display var(--dur-exit) allow-discrete;
+  }
+  .share-dialog[open]::backdrop { transition-duration: var(--dur-base); }
+}
+
+.share-body {
+  display: grid;
+  justify-items: center;
+  row-gap: 20px;
+  padding: 16px 20px 24px;
+}
+
+/* Header: the close button on the left, title and artist centered over the whole width. */
+.share-head {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  column-gap: 8px;
+  width: 100%;
+}
+/* A bare x-circle glyph in --text-2 (no disc behind it) in a 44 px hit target. */
+.share-close {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-2);
+  transition: color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.share-close:active:not(:disabled) { transform: scale(.94); }
+.share-close .icon svg { width: 28px; height: 28px; }
+.share-heading { grid-column: 2; min-width: 0; text-align: center; }
+.share-title, .share-artist {
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.share-title { font-size: 17px; line-height: 22px; font-weight: 600; }
+.share-artist { font-size: 14px; line-height: 20px; font-weight: 500; color: var(--text-2); }
+
+/* The QR: 240 px on a white square (radius 20, padding 20) that is also its quiet zone. */
+.share-qr { padding: 20px; border-radius: 20px; background: #fff; }
+.share-qr-code { position: relative; width: 240px; height: 240px; }
+.share-qr-code svg { display: block; width: 100%; height: 100%; }
+/* Placed in percent over the cleared center box (share-dialog.ts). */
+.share-qr-center { position: absolute; border-radius: 8px; object-fit: cover; }
+.share-qr-tile { display: grid; place-items: center; background: var(--mesh-1); color: #fff; }
+.share-qr-tile .icon svg { width: 24px; height: 24px; }
+
+/* Actions: 56 px circles with a label under each; five fit in a row at 360 px. */
+.share-actions { display: flex; justify-content: center; gap: 4px; width: 100%; }
+.share-action {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  row-gap: 8px;
+  flex: 0 1 72px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-1);
+  text-decoration: none;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.share-action:active:not(:disabled):not([aria-disabled="true"]) { transform: scale(.97); }
+.share-action-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: #fff;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.share-action-icon .icon svg { width: 24px; height: 24px; }
+.share-action-label {
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--text-2);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+/* The focus ring goes around the circle, not the circle and its label. */
+.share-action:focus-visible { outline: none; box-shadow: none; }
+.share-action:focus-visible .share-action-icon { outline: 2px solid #fff; box-shadow: 0 0 0 4px rgb(0 0 0 / .85); }
+@media (hover: hover) {
+  .share-close:hover { color: var(--text-1); }
+  .share-action:hover:not([aria-disabled="true"]) .share-action-icon { background: #34343A; }
+}
+/* Stories while its card is drawn: a spinner on the circle. */
+.share-action[aria-disabled="true"] { cursor: default; }
+.share-action[aria-busy="true"] .share-action-icon .icon { opacity: .4; }
+.share-action[aria-busy="true"] .share-action-icon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgb(255 255 255 / .2);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: share-spin .8s linear infinite;
+}
+@keyframes share-spin { to { transform: rotate(1turn); } }
+
+/* The page under the modal is inert, so the toast moves into the dialog while it is open:
+   under the card on wide screens, above the sheet on phones. */
+.share-dialog .toast { bottom: max(24px, calc(env(safe-area-inset-bottom) + 16px)); }
+
+@media (max-width: 639px) {
+  .share-dialog {
+    inset: auto 0 0;
+    width: 100%;
+    max-width: none;
+    max-height: calc(100dvh - max(16px, env(safe-area-inset-top)));
+    margin: 0;
+    border-width: 1px 0 0;
+    border-radius: 24px 24px 0 0;
+  }
+  /* The sheet slides instead of scaling. */
+  .share-dialog {
+    scale: 1;
+    translate: 0 100%;
+    transition: opacity var(--dur-base) var(--ease-out), translate var(--dur-base) var(--ease-out);
+  }
+  .share-dialog[open] { translate: 0 0; }
+  @starting-style {
+    .share-dialog[open] { opacity: 0; translate: 0 100%; }
+  }
+  @supports (overlay: auto) {
+    .share-dialog {
+      transition: opacity var(--dur-exit) var(--ease-out), translate var(--dur-exit) var(--ease-out), overlay var(--dur-exit) allow-discrete, display var(--dur-exit) allow-discrete;
+    }
+    .share-dialog[open] { transition-duration: var(--dur-base); }
+  }
+  .share-body {
+    padding: 12px max(16px, env(safe-area-inset-right)) max(24px, calc(env(safe-area-inset-bottom) + 16px)) max(16px, env(safe-area-inset-left));
+  }
+  .share-dialog .toast { top: max(16px, env(safe-area-inset-top)); bottom: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .share-action[aria-busy="true"] .share-action-icon::after { animation: none; }
+}
+
+/* --- 404 -------------------------------------------------------------------------------- */
+
+.not-found {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 20px;
+  padding: 24px;
+  text-align: center;
+}
+/* The navigation bar at the top, in its own frame, as on the home. */
+.not-found > .nav-bar { position: absolute; inset: 0 0 auto; }
+.not-found-tile {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  border-radius: var(--radius-panel);
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+.not-found-tile .icon svg { width: 40px; height: 40px; }
+.not-found-text {
+  max-width: 16em;
+  margin: 0;
+  font-size: 24px;
+  line-height: 28px;
+  font-weight: 700;
+}

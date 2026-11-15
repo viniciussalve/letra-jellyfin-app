@@ -1,0 +1,62 @@
+/* Inter with its optical-size axis: large verses get the display cut. */
+@import "@fontsource-variable/inter/opsz.css";
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  font-family: var(--font);
+  font-optical-sizing: auto;
+  color: var(--text-1);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+
+/* Focus ring: 2 px white with a 2 px dark outer ring, visible over any gradient. */
+:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 0;
+  box-shadow: 0 0 0 4px rgb(0 0 0 / .85);
+}
+:focus:not(:focus-visible) { outline: none; }
+
+/* Cross-document view transition between the home and the player: the root cross-fades and the
+   cover (named on the player's cover and on one home tile) moves between them. */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+}
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--dur-fast); }
+::view-transition-group(cover) { animation-duration: var(--dur-move); animation-timing-function: var(--ease-move); }
+/* A cover with nowhere to go (the other page has none) leaves, or arrives, with the root. */
+::view-transition-old(cover):only-child, ::view-transition-new(cover):only-child { animation-duration: var(--dur-fast); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :root {
+    --veil: rgb(0 0 0 / .7);
+    --glass-fill: rgb(60 60 67);
+    --glass-border: rgb(255 255 255 / .5);
+    --menu-bg: #1C1C1E;
+    --row-hover: rgb(255 255 255 / .16);
+    --hairline: rgb(255 255 255 / .5);
+    --bar-track: rgb(255 255 255 / .45);
+    --bar-fill: #fff;
+    --text-2: rgb(255 255 255 / .85);
+  }
+}

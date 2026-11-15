@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Teste — letra</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 24px 20px 64px; background: #111; color: #f2f2f2; font: 17px/1.45 system-ui, sans-serif; max-width: 640px; margin-inline: auto; }
+  h1 { font-size: 28px; margin: 0 0 4px; } h2 { font-size: 20px; margin: 32px 0 8px; }
+  p { margin: 8px 0; color: #c8c8c8; }
+  button { font: inherit; font-weight: 600; min-height: 48px; padding: 0 20px; border-radius: 24px; border: 0; background: #fff; color: #111; margin: 8px 8px 0 0; }
+  button:disabled { opacity: .4; }
+  audio { width: 100%; margin-top: 12px; }
+  .out { margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: #1c1c1e; white-space: pre-wrap; font: 15px/1.4 ui-monospace, monospace; min-height: 22px; }
+  .ok { color: #7ee0a1; } .bad { color: #ff8f8f; }
+</style>
+</head>
+<body>
+<h1>Teste do letra</h1>
+<p>Página temporária. Faça os três testes neste aparelho e, no fim, toque em "Copiar resultado" e cole na conversa.</p>
+
+<h2>1. Chave a partir da frase</h2>
+<p>Mede quanto tempo este aparelho leva para transformar uma frase em chave.</p>
+<button id="b-derive">Medir</button>
+<div class="out" id="o-derive"></div>
+
+<h2>2. Música cifrada</h2>
+<p>Cria um som de 3 minutos (o tom sobe a cada 30 segundos), embaralha e toca abrindo aos poucos. Depois de preparar: dê play, pule para o meio, bloqueie a tela por uns 20 segundos e volte.</p>
+<button id="b-prepare">Preparar</button>
+<button id="b-seek" disabled>Pular para 2:00</button>
+<audio id="audio" controls preload="none"></audio>
+<div class="out" id="o-audio"></div>
+
+<h2>3. Digital</h2>
+<p>Cria uma chave de teste neste aparelho (aparece como "letra teste" nas suas senhas; pode apagar depois) e confere se ela devolve sempre o mesmo segredo.</p>
+<button id="b-create">Ativar digital</button>
+<button id="b-get" disabled>Entrar com a digital</button>
+<div class="out" id="o-passkey"></div>
+
+<h2>Resultado</h2>
+<button id="b-copy">Copiar resultado</button>
+<div class="out" id="o-all"></div>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const results = { aparelho: navigator.userAgent };
+const show = (id, text, cls) => { const o = $(id); o.textContent = text; o.className = "out" + (cls ? " " + cls : ""); $("o-all").textContent = JSON.stringify(results, null, 1); };
+const hex = (buf, n = 8) => [...new Uint8Array(buf).slice(0, n)].map((b) => b.toString(16).padStart(2, "0")).join("");
+const fail = (e) => (e && e.name ? `${e.name}: ${e.message}` : String(e));
+show("o-derive", "");
+
+// 1. key from a phrase
+$("b-derive").onclick = async () => {
+  show("o-derive", "Calculando…");
+  try {
+    const t = performance.now();
+    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode("chuva rosa vaca manga feira onda"), "PBKDF2", false, ["deriveBits"]);
+    await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: new TextEncoder().encode("letra/v1"), iterations: 2000000 }, base, 256);
+    results.chave_ms = Math.round(performance.now() - t);
+    show("o-derive", `Pronto em ${results.chave_ms} ms.`, "ok");
+  } catch (e) { results.chave_erro = fail(e); show("o-derive", "Falhou: " + results.chave_erro, "bad"); }
+};
+
+// 2. encrypted audio through the service worker
+const CHUNK = 65536;
+const iv = (i) => { const b = new Uint8Array(12); new DataView(b.buffer).setUint32(8, i); return b; };
+function tone(seconds) {
+  const rate = 22050, n = rate * seconds, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  w(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); w(8, "WAVEfmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, "data"); v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) { const f = 220 * 2 ** (Math.floor(i / rate / 30) / 4); v.setInt16(44 + i * 2, Math.sin((2 * Math.PI * f * i) / rate) * 9000, true); }
+  return new Uint8Array(buf);
+}
+const audio = $("audio");
+$("b-prepare").onclick = async () => {
+  show("o-audio", "Preparando…");
+  try {
+    if (!("serviceWorker" in navigator)) throw new Error("este navegador não tem service worker");
+    const plain = tone(180);
+    const raw = crypto.getRandomValues(new Uint8Array(32));
+    const key = await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt"]);
+    const t = performance.now(); const parts = [];
+    for (let i = 0; i * CHUNK < plain.length; i++) parts.push(await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv(i) }, key, plain.subarray(i * CHUNK, (i + 1) * CHUNK)));
+    results.cifrar_ms = Math.round(performance.now() - t); results.tamanho_mb = +(plain.length / 1048576).toFixed(1);
+    const cache = await caches.open("letra-teste");
+    await cache.put("/teste/cipher", new Response(new Blob(parts)));
+    await cache.put("/teste/meta", new Response(JSON.stringify({ raw: [...raw], size: plain.length })));
+    await navigator.serviceWorker.register("/teste/sw.js", { scope: "/teste/" });
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller) await new Promise((r) => navigator.serviceWorker.addEventListener("controllerchange", r, { once: true }));
+    audio.src = "/teste/play?" + Date.now();
+    $("b-seek").disabled = false;
+    show("o-audio", `Cifrado em ${results.cifrar_ms} ms (${results.tamanho_mb} MB). Agora dê play.`, "ok");
+  } catch (e) { results.audio_erro = fail(e); show("o-audio", "Falhou: " + results.audio_erro, "bad"); }
+};
+let asked = 0;
+audio.addEventListener("play", () => { asked = performance.now(); });
+audio.addEventListener("playing", () => { if (asked && results.tocar_ms === undefined) { results.tocar_ms = Math.round(performance.now() - asked); show("o-audio", `Começou a tocar em ${results.tocar_ms} ms.`, "ok"); } });
+audio.addEventListener("error", () => { results.audio_erro = "erro do player: " + (audio.error?.message || audio.error?.code); show("o-audio", "Falhou: " + results.audio_erro, "bad"); });
+$("b-seek").onclick = async () => {
+  const t = performance.now(); audio.currentTime = 120;
+  await new Promise((r) => audio.addEventListener("seeked", r, { once: true }));
+  results.pular_ms = Math.round(performance.now() - t); results.pulou_para_s = Math.round(audio.currentTime);
+  show("o-audio", `Pulou para ${results.pulou_para_s} s em ${results.pular_ms} ms.`, "ok");
+  audio.play().catch(() => {});
+};
+document.addEventListener("visibilitychange", () => { if (!document.hidden && !audio.paused) { results.voltou_tocando_em_s = Math.round(audio.currentTime); show("o-audio", `Voltou com a música em ${results.voltou_tocando_em_s} s, tocando.`, "ok"); } });
+
+// 3. passkey with the PRF extension
+const salt = new TextEncoder().encode("letra/teste/prf/v1");
+let credentialId = null;
+$("b-create").onclick = async () => {
+  show("o-passkey", "Aguardando o aparelho…");
+  try {
+    if (!window.PublicKeyCredential) throw new Error("este navegador não tem chaves de acesso");
+    const cred = await navigator.credentials.create({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rp: { name: "letra", id: location.hostname },
+      user: { id: crypto.getRandomValues(new Uint8Array(16)), name: "letra teste", displayName: "letra teste" },
+      pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+      authenticatorSelection: { residentKey: "required", userVerification: "required" },
+      extensions: { prf: { eval: { first: salt } } },
+    } });
+    credentialId = cred.rawId;
+    const prf = cred.getClientExtensionResults().prf;
+    results.digital_criada = true; results.digital_prf_ativo = Boolean(prf?.enabled || prf?.results?.first);
+    results.digital_tipo = cred.authenticatorAttachment ?? "desconhecido";
+    $("b-get").disabled = false;
+    show("o-passkey", results.digital_prf_ativo ? "Chave criada, e o aparelho aceita guardar segredo. Agora toque em \"Entrar com a digital\"." : "Chave criada, mas o aparelho não confirmou o segredo. Toque em \"Entrar com a digital\" para conferir.", results.digital_prf_ativo ? "ok" : "");
+  } catch (e) { results.digital_erro = fail(e); show("o-passkey", "Falhou: " + results.digital_erro, "bad"); }
+};
+$("b-get").onclick = async () => {
+  show("o-passkey", "Aguardando o aparelho…");
+  try {
+    const once = async () => {
+      const a = await navigator.credentials.get({ publicKey: {
+        challenge: crypto.getRandomValues(new Uint8Array(32)), rpId: location.hostname, userVerification: "required",
+        allowCredentials: credentialId ? [{ type: "public-key", id: credentialId }] : [],
+        extensions: { prf: { eval: { first: salt } } },
+      } });
+      return a.getClientExtensionResults().prf?.results?.first ?? null;
+    };
+    const first = await once();
+    if (!first) { results.digital_segredo = false; show("o-passkey", "O aparelho entrou com a digital, mas não devolveu o segredo. Neste aparelho a digital serviria só para entrar, não para abrir as músicas.", "bad"); return; }
+    const second = await once();
+    results.digital_segredo = true; results.digital_segredo_igual = Boolean(second) && hex(first, 32) === hex(second, 32);
+    show("o-passkey", results.digital_segredo_igual ? "Funcionou: o aparelho devolveu o mesmo segredo nas duas vezes." : "O aparelho devolveu segredos diferentes nas duas vezes.", results.digital_segredo_igual ? "ok" : "bad");
+  } catch (e) { results.digital_erro = fail(e); show("o-passkey", "Falhou: " + results.digital_erro, "bad"); }
+};
+
+$("b-copy").onclick = async () => {
+  const text = JSON.stringify(results, null, 1);
+  try { await navigator.clipboard.writeText(text); $("b-copy").textContent = "Copiado"; } catch { $("o-all").textContent = text + "\n\n(não deu para copiar sozinho; selecione o texto acima)"; }
+};
+</script>
+</body>
+</html>
