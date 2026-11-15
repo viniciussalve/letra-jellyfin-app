@@ -93,10 +93,10 @@ describe("Tier 3: Cross-Feature Combinations", () => {
     expect(rangeAudio.status).toBe(206);
 
     const t1 = (await (
-      await fetch(`${app.baseUrl}/api/tracks/jfcombo001/translation?lang=en`)
+      await fetch(`${app.baseUrl}/api/tracks/jfcombo001/translation?lang=pt-BR`)
     ).json()) as TranslationDTO;
     const t2 = (await (
-      await fetch(`${app.baseUrl}/api/tracks/jfcombo001/translation?lang=en`)
+      await fetch(`${app.baseUrl}/api/tracks/jfcombo001/translation?lang=pt-BR`)
     ).json()) as TranslationDTO;
     expect(t1.lines).toHaveLength(2);
     expect(t2).toEqual(t1);
@@ -129,7 +129,7 @@ describe("Tier 3: Cross-Feature Combinations", () => {
 
   it("3. Manual lyrics update + translation cache invalidation + single-line translate", async () => {
     const firstTrans = (await (
-      await fetch(`${app.baseUrl}/api/tracks/jfcombo001/translation?lang=en`)
+      await fetch(`${app.baseUrl}/api/tracks/jfcombo001/translation?lang=pt-BR`)
     ).json()) as TranslationDTO;
     expect(firstTrans.lines).toHaveLength(2);
 
@@ -144,13 +144,13 @@ describe("Tier 3: Cross-Feature Combinations", () => {
     expect(putRes.status).toBe(200);
 
     const secondTrans = (await (
-      await fetch(`${app.baseUrl}/api/tracks/jfcombo001/translation?lang=en`)
+      await fetch(`${app.baseUrl}/api/tracks/jfcombo001/translation?lang=pt-BR`)
     ).json()) as TranslationDTO;
     expect(secondTrans.lines).toHaveLength(3);
     expect(secondTrans.lines).not.toEqual(firstTrans.lines);
 
     const lineRes = await fetch(
-      `${app.baseUrl}/api/tracks/jfcombo001/translation/line?index=1&lang=en&text=${encodeURIComponent("Nova linha dois")}`,
+      `${app.baseUrl}/api/tracks/jfcombo001/translation/line?index=1&lang=pt-BR&text=${encodeURIComponent("Nova linha dois")}`,
     );
     expect(lineRes.status).toBe(200);
     const lineBody = (await lineRes.json()) as LineTranslationDTO;

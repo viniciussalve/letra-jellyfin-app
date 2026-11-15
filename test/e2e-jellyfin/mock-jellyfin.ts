@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { basename, extname, join } from "node:path";
@@ -219,7 +219,11 @@ export async function startMockJellyfin(opts: MockJellyfinOptions = {}): Promise
       const mime = AUDIO_EXT_MIME[ext];
       if (!mime) continue;
       const base = basename(file, ext);
-      const id = `lib-${base.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+      const slug = base.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const id =
+        slug.length <= 80
+          ? `lib-${slug}`
+          : `lib-${slug.slice(0, 48)}-${createHash("sha1").update(base).digest("hex").slice(0, 12)}`;
       if (items.has(id)) continue;
 
       const audioBytes = readFileSync(file);

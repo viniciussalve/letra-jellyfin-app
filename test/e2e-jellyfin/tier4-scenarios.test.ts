@@ -129,13 +129,13 @@ describe("Tier 4: Real-World End-to-End User Workflows", () => {
     expect(coverRes.status).toBe(200);
 
     const fullTrans = (await (
-      await fetch(`${app.baseUrl}/api/tracks/jfwork002/translation?lang=en`)
+      await fetch(`${app.baseUrl}/api/tracks/jfwork002/translation?lang=pt-BR`)
     ).json()) as TranslationDTO;
     expect(fullTrans.lines).toHaveLength(2);
 
     const lineTrans = (await (
       await fetch(
-        `${app.baseUrl}/api/tracks/jfwork002/translation/line?index=1&lang=en&text=${encodeURIComponent("Canta comigo ate amanhecer")}`,
+        `${app.baseUrl}/api/tracks/jfwork002/translation/line?index=1&lang=pt-BR&text=${encodeURIComponent("Canta comigo ate amanhecer")}`,
       )
     ).json()) as LineTranslationDTO;
     expect(lineTrans.text).toBeTruthy();

@@ -158,10 +158,10 @@ describe("Tier 1: Feature Coverage (F1–F6)", () => {
     });
 
     it("GET /api/tracks/:id/translation works with JSON/in-memory cache without SQLite", async () => {
-      const res = await fetch(`${app.baseUrl}/api/tracks/jftrack001/translation?lang=en`);
+      const res = await fetch(`${app.baseUrl}/api/tracks/jftrack001/translation?lang=pt-BR`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as TranslationDTO;
-      expect(body.lang).toBe("en");
+      expect(body.lang).toBe("pt-BR");
       expect(body.lines).toHaveLength(3);
     });
 
@@ -284,13 +284,13 @@ describe("Tier 1: Feature Coverage (F1–F6)", () => {
     it("GET /api/tracks/:id/translation/line translates a single line and caches it", async () => {
       const params = new URLSearchParams({
         index: "0",
-        lang: "en",
+        lang: "pt-BR",
         text: "Primeiro verso da musica",
       });
       const res = await fetch(`${app.baseUrl}/api/tracks/jftrack001/translation/line?${params}`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as LineTranslationDTO;
-      expect(body.lang).toBe("en");
+      expect(body.lang).toBe("pt-BR");
       expect(body.text).toBeTruthy();
     });
   });
