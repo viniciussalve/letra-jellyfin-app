@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Docker smoke test: build the image, start it, log in, upload the fixture and
-# fetch the share page and the audio. Exits non-zero on the first failed check.
+# Docker smoke test: build the image, start it against a mock Jellyfin on the host, log in,
+# upload the fixture and fetch the share page and the audio. Exits non-zero on the first failed check.
 # Run from anywhere: bash scripts/docker-smoke.sh
 set -euo pipefail
 
@@ -9,16 +9,23 @@ cd "$(dirname "$0")/.."
 PROJECT=letra-smoke
 export APP_PORT=3999
 export PORT=3000
-export UPLOAD_PASSWORD=smoke
 export TRANSLATOR=fake
 export PUBLIC_URL="http://localhost:${APP_PORT}"
 BASE="$PUBLIC_URL"
+JELLYFIN_PORT=3998
+LRCLIB_PORT=3997
+export JELLYFIN_URL="http://host.docker.internal:${JELLYFIN_PORT}"
+export LRCLIB_URL="http://host.docker.internal:${LRCLIB_PORT}"
 
-compose() { docker compose -p "$PROJECT" "$@"; }
+compose() { docker compose -p "$PROJECT" -f docker-compose.yml -f scripts/docker-smoke.compose.yml "$@"; }
 
 WORK="$(mktemp -d)"
+export SMOKE_LIBRARY_DIR="$WORK/library"
+mkdir -m 777 "$SMOKE_LIBRARY_DIR"
+MOCK_PID=""
 cleanup() {
   status=$?
+  [ -n "$MOCK_PID" ] && kill "$MOCK_PID" 2>/dev/null || true
   if [ "$status" -ne 0 ]; then
     echo "FAIL: smoke test aborted (exit $status). Container logs:" >&2
     compose logs --no-color --tail 50 app >&2 || true
@@ -31,6 +38,14 @@ trap cleanup EXIT
 
 step() { echo "==> $*"; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
+
+step "start the mock Jellyfin and LRCLIB on the host"
+node scripts/smoke-jellyfin.ts "$SMOKE_LIBRARY_DIR" "$JELLYFIN_PORT" "$LRCLIB_PORT" >"$WORK/mock.log" 2>&1 &
+MOCK_PID=$!
+for _ in $(seq 1 50); do grep -q '^ready' "$WORK/mock.log" && break; sleep 0.2; done
+grep -q '^ready' "$WORK/mock.log" || fail "mock Jellyfin did not start: $(cat "$WORK/mock.log")"
+export JELLYFIN_API_KEY="$(sed -n 's/^ready api-key=//p' "$WORK/mock.log")"
+echo "ok: mock Jellyfin on port $JELLYFIN_PORT"
 
 step "build and start (project $PROJECT, port $APP_PORT)"
 compose up -d --build
@@ -56,9 +71,9 @@ done
 [ "$health" = "healthy" ] || fail "container health is '$health', expected 'healthy'"
 echo "ok: container is healthy"
 
-step "log in with the password"
+step "log in with the mock Jellyfin user"
 code="$(curl -s -o /dev/null -w '%{http_code}' -c "$WORK/jar" \
-  -H 'Content-Type: application/json' -d "{\"password\":\"$UPLOAD_PASSWORD\"}" "$BASE/api/session")"
+  -H 'Content-Type: application/json' -d '{"username":"jelly","password":"jelly-pass"}' "$BASE/api/session")"
 [ "$code" = "200" ] || fail "login returned $code, expected 200"
 echo "ok: login returned 200"
 

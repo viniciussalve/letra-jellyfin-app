@@ -1,0 +1,13 @@
+# Smoke-test override for docker-compose.yml: the app talks to the mock Jellyfin on the host
+# and writes uploads into the library folder the mock scans.
+services:
+  app:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - JELLYFIN_URL
+      - JELLYFIN_API_KEY
+      - JELLYFIN_LIBRARY_DIR=/library
+      - LRCLIB_URL
+    volumes:
+      - ${SMOKE_LIBRARY_DIR:?}:/library

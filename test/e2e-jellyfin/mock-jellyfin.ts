@@ -43,6 +43,9 @@ export type MockJellyfinOptions = {
   serverVersion?: string;
   apiKey?: string;
   users?: MockJellyfinUser[];
+  /** Listen address; 0.0.0.0 lets a Docker container reach the mock (scripts/docker-smoke.sh). */
+  host?: string;
+  port?: number;
 };
 
 export type FaultOptions = {
@@ -503,7 +506,7 @@ export async function startMockJellyfin(opts: MockJellyfinOptions = {}): Promise
   });
 
   await new Promise<void>((resolve) => {
-    server.listen(0, "127.0.0.1", () => resolve());
+    server.listen(opts.port ?? 0, opts.host ?? "127.0.0.1", () => resolve());
   });
   const addr = server.address();
   if (!addr || typeof addr === "string") {
@@ -557,7 +560,10 @@ export type MockLrclibServer = {
   getRequestCount: () => number;
 };
 
-export async function startMockLrclib(initialRecords: MockLrclibRecord[] = []): Promise<MockLrclibServer> {
+export async function startMockLrclib(
+  initialRecords: MockLrclibRecord[] = [],
+  listen: { host?: string; port?: number } = {},
+): Promise<MockLrclibServer> {
   let records = [...initialRecords];
   let requestCount = 0;
 
@@ -591,7 +597,7 @@ export async function startMockLrclib(initialRecords: MockLrclibRecord[] = []): 
   });
 
   await new Promise<void>((resolve) => {
-    server.listen(0, "127.0.0.1", () => resolve());
+    server.listen(listen.port ?? 0, listen.host ?? "127.0.0.1", () => resolve());
   });
   const addr = server.address();
   if (!addr || typeof addr === "string") {
