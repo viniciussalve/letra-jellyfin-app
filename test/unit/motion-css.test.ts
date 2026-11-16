@@ -66,6 +66,11 @@ describe("stylesheets", () => {
       for (const [, selector, body] of rules) expect(body, `${sheet}: ${selector!.trim()}`).not.toMatch(/filter/);
     }
   });
+  it("never animates filter (static blur rules stay)", () => {
+    const css = read("player/styles.css");
+    for (const m of css.matchAll(/transition(?:-property)?\s*:\s*([^;}]+)/g)) expect(m[1], m[0]).not.toMatch(/\bfilter\b/);
+    for (const m of css.matchAll(/@keyframes[^{]*\{(?:[^{}]*\{[^}]*\})*[^}]*\}/g)) expect(m[0]).not.toMatch(/\bfilter\s*:/);
+  });
   it("moves nothing by a layout property", () => {
     const ALLOWED = [/slider-runnable-track[^}]*transition:\s*height/, /\.bar-fill[^}]*transition:\s*width/];
     for (const sheet of SHEETS) {
