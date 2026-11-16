@@ -27,7 +27,7 @@ const PORT = 4398;
 const BASE = `http://127.0.0.1:${PORT}`;
 const USERNAME = "jelly";
 const PASSWORD = "jelly-pass";
-const CPU_THROTTLE = 4;
+let CPU_THROTTLE = 4;
 const GUARD_MS = 15_000;
 const VIEWPORTS = [
   { name: "390x844", width: 390, height: 844 },
@@ -46,11 +46,14 @@ const fail = (message) => {
 };
 
 function parseArgs(argv) {
-  const out = { json: null, runs: 1 };
+  const out = { json: null, runs: 1, cpu: 4 };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--json") {
       out.json = argv[++i];
       if (!out.json) throw new Error("--json needs a file name");
+    } else if (argv[i] === "--cpu") {
+      out.cpu = Number(argv[++i]);
+      if (!(out.cpu >= 1)) throw new Error("--cpu needs a rate of 1 or more");
     } else if (argv[i] === "--runs") {
       out.runs = Number(argv[++i]);
       if (!Number.isInteger(out.runs) || out.runs < 1) throw new Error("--runs needs a whole number of 1 or more");
@@ -262,6 +265,7 @@ async function lyricsFollow(browser, viewport, track) {
   const { page, context } = await openPlayer(browser, viewport, track);
   try {
     await throttle(page);
+    await browser.startTracing(page, { categories: ["devtools.timeline", "disabled-by-default-devtools.timeline"] });
     const start = await page.evaluate(now);
     for (const [k, time] of SEEKS.entries()) {
       await page.evaluate((t) => {
@@ -271,7 +275,10 @@ async function lyricsFollow(browser, viewport, track) {
       await page.evaluate(settled);
     }
     const end = await page.evaluate(now);
-    return analyse([await page.evaluate(() => window.__frames)], start, end);
+    const trace = JSON.parse((await browser.stopTracing()).toString());
+    // Main-thread paint recording, summed over the window: what animating filter costs every frame.
+    const paintUs = trace.traceEvents.filter((e) => e.name === "Paint" && e.ph === "X").reduce((sum, e) => sum + (e.dur ?? 0), 0);
+    return { ...analyse([await page.evaluate(() => window.__frames)], start, end), paintMs: Math.round(paintUs / 100) / 10 };
   } finally {
     await context.close();
   }
@@ -307,9 +314,9 @@ const medianRows = (runs) =>
   });
 
 function table(rows) {
-  const head = ["Interaction", "Viewport", "Frames", `> ${MISSED_MS} ms`, `> ${LONG_MS} ms`, "Longest (ms)", "Nav gap (ms)"];
+  const head = ["Interaction", "Viewport", "Frames", `> ${MISSED_MS} ms`, `> ${LONG_MS} ms`, "Longest (ms)", "Nav gap (ms)", "Paint (ms)"];
   const dash = (v) => (v === null || v === undefined ? "-" : String(v));
-  const lines = [head, ...rows.map((r) => [r.interaction, r.viewport, r.frames, r.over25, r.over33, r.longestMs, dash(r.navGapMs)].map(String))];
+  const lines = [head, ...rows.map((r) => [r.interaction, r.viewport, r.frames, r.over25, r.over33, r.longestMs, dash(r.navGapMs), dash(r.paintMs)].map(String))];
   const widths = head.map((_, c) => Math.max(...lines.map((l) => l[c].length)));
   const fmt = (l) => `| ${l.map((cell, c) => cell.padEnd(widths[c])).join(" | ")} |`;
   return [fmt(lines[0]), `| ${widths.map((w) => "-".repeat(w)).join(" | ")} |`, ...lines.slice(1).map(fmt)].join("\n");
@@ -317,6 +324,7 @@ function table(rows) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  CPU_THROTTLE = args.cpu;
   if (!existsSync(fileURLToPath(new URL("../dist/web/player/index.html", import.meta.url)))) {
     throw new Error("dist/web is missing; run `npx vite build` from the repo root first");
   }
