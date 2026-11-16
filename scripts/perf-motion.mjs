@@ -20,12 +20,13 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-const { chromium, request: apiRequest } = require("playwright");
+const { chromium, request: apiRequest } = require("@playwright/test");
 
 const APP = fileURLToPath(new URL("..", import.meta.url));
 const PORT = 4398;
 const BASE = `http://127.0.0.1:${PORT}`;
-const PASSWORD = "e2e-pass";
+const USERNAME = "jelly";
+const PASSWORD = "jelly-pass";
 const CPU_THROTTLE = 4;
 const GUARD_MS = 15_000;
 const VIEWPORTS = [
@@ -98,7 +99,7 @@ function stopServer(child) {
 async function uploadTwice() {
   const api = await apiRequest.newContext({ baseURL: BASE, extraHTTPHeaders: { "x-forwarded-for": "10.9.8.7" } });
   try {
-    const login = await api.post("/api/session", { data: { password: PASSWORD } });
+    const login = await api.post("/api/session", { data: { username: USERNAME, password: PASSWORD } });
     if (!login.ok()) throw new Error(`login failed: ${login.status()}`);
     const buffer = readFileSync(new URL("../test/fixtures/song.mp3", import.meta.url));
     const tracks = [];

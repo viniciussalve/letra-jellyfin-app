@@ -698,7 +698,7 @@ test("during the scroll jump the previously active verse's translate does not tr
   await setTime(page, 0.6);
   await expect(verse(page, 0)).toHaveAttribute("data-state", "active");
   // The FLIP offsets rows instantly (.is-jumping); the active verse used to win that cascade.
-  // Only translate is dropped, so opacity, transform and filter keep running (and their timing).
+  // Only translate is dropped, so opacity and transform keep running (and their timing).
   const t = await page.evaluate(() => {
     const list = document.querySelector(".lyrics-list")!;
     const read = () => {
@@ -711,7 +711,7 @@ test("during the scroll jump the previously active verse's translate does not tr
     list.classList.remove("is-jumping");
     return { before, during };
   });
-  expect(t.during.props.split(",").map((x) => x.trim())).toEqual(["opacity", "transform", "filter"]);
+  expect(t.during.props.split(",").map((x) => x.trim())).toEqual(["opacity", "transform"]);
   expect(t.during.durations.split(",").map((x) => parseFloat(x))[0]).toBeGreaterThan(0);
   expect(t.during.durations.split(",")[0]).toBe(t.before.durations.split(",")[0]);
 });

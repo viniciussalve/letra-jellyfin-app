@@ -320,11 +320,11 @@ body { overflow: hidden; overscroll-behavior: none; }
   overflow-wrap: break-word;
   cursor: default;
   transform-origin: left center;
-  /* The verse that dims waits a beat; the one that lights (below) does not. */
+  /* The verse that dims waits a beat; the one that lights (below) does not.
+     Blur is not in the list: it snaps, since animating filter repaints every frame. */
   transition:
     opacity var(--lyrics-duration) var(--lyrics-ease) var(--lyrics-dim-delay),
     transform var(--lyrics-duration) var(--lyrics-ease) var(--lyrics-dim-delay),
-    filter var(--lyrics-duration) var(--lyrics-ease) var(--lyrics-dim-delay),
     translate var(--lyrics-follow) var(--ease-move);
 }
 .lyrics[data-lyrics-state="synced"] .verse:not([data-state="active"]) {
@@ -335,7 +335,6 @@ body { overflow: hidden; overscroll-behavior: none; }
   transition:
     opacity var(--lyrics-duration) var(--lyrics-ease),
     transform var(--lyrics-duration) var(--lyrics-ease),
-    filter var(--lyrics-duration) var(--lyrics-ease),
     translate var(--lyrics-follow) var(--ease-move);
 }
 .lyrics[data-lyrics-state="synced"] .verse:not([data-state="active"])[data-blur="1"] { filter: blur(var(--blur-1)); }
@@ -346,7 +345,7 @@ button.verse { cursor: pointer; }
    fades still running on a verse are not cancelled. Translate is the last entry of every
    verse transition list, so the duration, delay and easing lists still line up by index.
    Specific enough to beat the active verse's list, so the verse that was active slides too. */
-.lyrics[data-lyrics-state] .lyrics-list.is-jumping .verse { transition-property: opacity, transform, filter; }
+.lyrics[data-lyrics-state] .lyrics-list.is-jumping .verse { transition-property: opacity, transform; }
 /* The wipe: one inline span, so wrapped lines fill in reading order. */
 .verse[data-state="active"] .verse-text {
   background: linear-gradient(90deg, #fff var(--p, 0%), var(--verse-unsung) var(--p, 0%));
